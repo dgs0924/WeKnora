@@ -70,10 +70,13 @@
       <div v-if="ldapEnabled" class="setting-row">
         <div class="setting-info">
           <label>{{ $t('userProfile.ldapLink.label') }}</label>
-          <p class="desc">{{ $t('userProfile.ldapLink.description') }}</p>
+          <p class="desc">{{ $t(userInfo?.ldap_bound ? 'userProfile.ldapLink.boundDescription' : 'userProfile.ldapLink.description') }}</p>
         </div>
         <div class="setting-control">
-          <t-button theme="primary" variant="outline" size="small" @click="ldapLinkPopupVisible = true">
+          <t-tag v-if="userInfo?.ldap_bound" theme="success" variant="light">
+            {{ $t('userProfile.ldapLink.bound') }}
+          </t-tag>
+          <t-button v-else theme="primary" variant="outline" size="small" @click="ldapLinkPopupVisible = true">
             {{ $t('userProfile.ldapLink.action') }}
           </t-button>
         </div>
@@ -439,6 +442,7 @@ const submitLDAPLink = async () => {
     }
     ldapLinkPopupVisible.value = false
     resetLDAPLinkForm()
+    await loadInfo()
     MessagePlugin.success(t('userProfile.ldapLink.success'))
   } finally {
     ldapLinkSubmitting.value = false

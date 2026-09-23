@@ -388,6 +388,7 @@ export default {
       oidcOnlyNotice: '请联系系统管理员重置密码，或继续使用 OIDC 登录。自助修改密码需要先知道当前密码。',
     },
     ldapLink: {
+      bound: '已绑定', boundDescription: '已绑定目录账号，可使用 LDAP 登录当前账户。',
       label: '绑定 LDAP 账号', description: '验证本地账号和 LDAP 账号后，将目录身份绑定到当前账户。', action: '绑定账号', title: '绑定 LDAP 账号',
       hint: '请输入当前本地密码和 LDAP 账号密码。密码仅用于本次验证，不会显示或保存到浏览器。',
       localPasswordLabel: '当前本地密码', localPasswordPlaceholder: '输入当前本地密码', localPasswordRequired: '请输入当前本地密码',

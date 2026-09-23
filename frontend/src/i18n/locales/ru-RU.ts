@@ -368,6 +368,7 @@ export default {
   userProfile: {
     title: 'Информация о пользователе',
     ldapLink: {
+      bound: 'Привязано', boundDescription: 'Учётная запись LDAP привязана; теперь можно входить через каталог.',
       label: 'Привязать учётную запись LDAP', description: 'Подтвердите локальную учётную запись и LDAP, чтобы привязать идентификатор каталога к этому аккаунту.', action: 'Привязать аккаунт', title: 'Привязать учётную запись LDAP', hint: 'Введите текущий локальный пароль и пароль LDAP. Пароли используются только для этой проверки и не сохраняются в браузере.',
       localPasswordLabel: 'Текущий локальный пароль', localPasswordPlaceholder: 'Введите текущий локальный пароль', localPasswordRequired: 'Введите текущий локальный пароль', usernameLabel: 'Имя пользователя LDAP', usernamePlaceholder: 'Введите доменную учётную запись или имя пользователя', usernameRequired: 'Введите имя пользователя LDAP', ldapPasswordLabel: 'Пароль LDAP', ldapPasswordPlaceholder: 'Введите пароль LDAP', ldapPasswordRequired: 'Введите пароль LDAP', submit: 'Привязать', success: 'Учётная запись LDAP привязана', failed: 'Не удалось привязать учётную запись LDAP. Повторите попытку.', invalidCredentials: 'Локальный пароль или пароль LDAP неверен.', conflict: 'Эта учётная запись LDAP уже привязана к другому пользователю или её email не совпадает с текущим аккаунтом.', unavailable: 'Служба LDAP временно недоступна. Повторите попытку позже.',
     },

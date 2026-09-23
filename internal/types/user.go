@@ -275,6 +275,7 @@ type UserInfo struct {
 	IsActive            bool            `json:"is_active"`
 	CanAccessAllTenants bool            `json:"can_access_all_tenants"`
 	IsSystemAdmin       bool            `json:"is_system_admin"`
+	LDAPBound           bool            `json:"ldap_bound"`
 	Preferences         UserPreferences `json:"preferences"`
 	CreatedAt           time.Time       `json:"created_at"`
 	UpdatedAt           time.Time       `json:"updated_at"`
@@ -291,6 +292,7 @@ func (u *User) ToUserInfo() *UserInfo {
 		IsActive:            u.IsActive,
 		CanAccessAllTenants: u.CanAccessAllTenants,
 		IsSystemAdmin:       u.IsSystemAdmin,
+		LDAPBound:           u.LDAPSubject != nil && *u.LDAPSubject != "",
 		Preferences:         u.Preferences,
 		CreatedAt:           u.CreatedAt,
 		UpdatedAt:           u.UpdatedAt,

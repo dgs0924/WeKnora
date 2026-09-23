@@ -7227,6 +7227,7 @@ export default {
       oidcOnlyNotice: 'Ask a system administrator to reset your password, or keep signing in with OIDC. Self-service change requires your current password.',
     },
     ldapLink: {
+      bound: 'Linked', boundDescription: 'This account is linked to LDAP and can sign in with its directory identity.',
       label: 'Link LDAP account', description: 'Verify your local and LDAP accounts to link the directory identity to this account.', action: 'Link account', title: 'Link LDAP account',
       hint: 'Enter your current local password and LDAP password. Passwords are used only for this verification and are not displayed or stored in your browser.',
       localPasswordLabel: 'Current local password', localPasswordPlaceholder: 'Enter your current local password', localPasswordRequired: 'Enter your current local password',

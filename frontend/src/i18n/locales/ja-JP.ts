@@ -7204,6 +7204,7 @@ export default {
   userProfile: {
     title: 'ユーザ情報',
     ldapLink: {
+      bound: '連携済み', boundDescription: 'LDAP アカウントを連携済みです。ディレクトリアカウントでログインできます。',
       label: 'LDAP アカウントを連携', description: 'ローカルアカウントと LDAP アカウントを確認して、このアカウントにディレクトリIDを連携します。', action: 'アカウントを連携', title: 'LDAP アカウントを連携', hint: '現在のローカルパスワードと LDAP パスワードを入力してください。パスワードはこの確認だけに使用され、ブラウザに保存されません。',
       localPasswordLabel: '現在のローカルパスワード', localPasswordPlaceholder: '現在のローカルパスワードを入力', localPasswordRequired: '現在のローカルパスワードを入力してください', usernameLabel: 'LDAP ユーザー名', usernamePlaceholder: 'ドメインアカウントまたはユーザー名を入力', usernameRequired: 'LDAP ユーザー名を入力してください', ldapPasswordLabel: 'LDAP パスワード', ldapPasswordPlaceholder: 'LDAP パスワードを入力', ldapPasswordRequired: 'LDAP パスワードを入力してください', submit: '連携', success: 'LDAP アカウントを連携しました', failed: 'LDAP アカウントの連携に失敗しました。もう一度お試しください。', invalidCredentials: 'ローカルパスワードまたは LDAP パスワードが正しくありません。', conflict: 'この LDAP アカウントは別のユーザーに連携済みか、メールアドレスが一致しません。', unavailable: 'LDAP サービスは一時的に利用できません。後でもう一度お試しください。',
     },

@@ -368,6 +368,7 @@ export default {
   userProfile: {
     title: '사용자 정보',
     ldapLink: {
+      bound: '연결됨', boundDescription: 'LDAP 계정이 연결되어 디렉터리 계정으로 로그인할 수 있습니다.',
       label: 'LDAP 계정 연결', description: '로컬 계정과 LDAP 계정을 확인하여 현재 계정에 디렉터리 ID를 연결합니다.', action: '계정 연결', title: 'LDAP 계정 연결', hint: '현재 로컬 비밀번호와 LDAP 비밀번호를 입력하세요. 비밀번호는 이번 확인에만 사용되며 브라우저에 저장되지 않습니다.',
       localPasswordLabel: '현재 로컬 비밀번호', localPasswordPlaceholder: '현재 로컬 비밀번호 입력', localPasswordRequired: '현재 로컬 비밀번호를 입력하세요', usernameLabel: 'LDAP 사용자 이름', usernamePlaceholder: '도메인 계정 또는 사용자 이름 입력', usernameRequired: 'LDAP 사용자 이름을 입력하세요', ldapPasswordLabel: 'LDAP 비밀번호', ldapPasswordPlaceholder: 'LDAP 비밀번호 입력', ldapPasswordRequired: 'LDAP 비밀번호를 입력하세요', submit: '연결', success: 'LDAP 계정이 연결되었습니다', failed: 'LDAP 계정 연결에 실패했습니다. 다시 시도하세요.', invalidCredentials: '로컬 비밀번호 또는 LDAP 비밀번호가 올바르지 않습니다.', conflict: '이 LDAP 계정은 다른 사용자에게 연결되어 있거나 이메일이 현재 계정과 다릅니다.', unavailable: 'LDAP 서비스를 일시적으로 사용할 수 없습니다. 나중에 다시 시도하세요.',
     },
