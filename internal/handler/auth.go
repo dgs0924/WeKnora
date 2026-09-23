@@ -305,6 +305,31 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.NewAuthLoginResponse(response))
 }
 
+// LDAPLogin authenticates a directory account and returns the ordinary
+// WeKnora token and membership response.
+func (h *AuthHandler) LDAPLogin(c *gin.Context) {
+	if h.configInfo == nil || h.configInfo.LDAPAuth == nil || !h.configInfo.LDAPAuth.Enable {
+		c.JSON(http.StatusNotFound, gin.H{"error": "LDAP login is not enabled"})
+		return
+	}
+	var req types.LDAPLoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Username) == "" || req.Password == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "username and password are required"})
+		return
+	}
+	response, err := h.userService.LoginWithLDAP(c.Request.Context(), strings.TrimSpace(req.Username), req.Password)
+	if err != nil {
+		logger.Errorf(c.Request.Context(), "LDAP login failed: %v", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "LDAP login is temporarily unavailable"})
+		return
+	}
+	if !response.Success {
+		c.JSON(http.StatusUnauthorized, dto.NewAuthLoginResponse(response))
+		return
+	}
+	c.JSON(http.StatusOK, dto.NewAuthLoginResponse(response))
+}
+
 // GetOIDCAuthorizationURL godoc
 // @Summary      获取OIDC授权地址
 // @Description  根据后端OIDC配置生成第三方登录跳转地址
@@ -841,6 +866,7 @@ func (h *AuthHandler) GetAuthConfig(c *gin.Context) {
 		"success":                  true,
 		"registration_mode":        mode,
 		"complex_password_enabled": complexPasswordEnabled,
+		"ldap_enabled":             h.configInfo != nil && h.configInfo.LDAPAuth != nil && h.configInfo.LDAPAuth.Enable,
 	})
 }
 

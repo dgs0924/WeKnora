@@ -98,6 +98,19 @@ func (r *userRepository) GetUserByUsername(ctx context.Context, username string)
 	return &user, nil
 }
 
+// GetUserByLDAPSubject resolves only directory-bound accounts. Email matches
+// are never used to grant an LDAP login to a pre-existing local account.
+func (r *userRepository) GetUserByLDAPSubject(ctx context.Context, subject string) (*types.User, error) {
+	var user types.User
+	if err := r.db.WithContext(ctx).Where("ldap_subject = ?", subject).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
 // GetUserByTenantID gets the first user (owner) of a tenant
 func (r *userRepository) GetUserByTenantID(ctx context.Context, tenantID uint64) (*types.User, error) {
 	var user types.User

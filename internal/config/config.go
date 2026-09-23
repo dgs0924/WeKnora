@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -24,6 +25,7 @@ type Config struct {
 	Auth            *AuthConfig            `yaml:"auth"             json:"auth"`
 	Audit           *AuditConfig           `yaml:"audit"            json:"audit"`
 	OIDCAuth        *OIDCAuthConfig        `yaml:"oidc_auth"        json:"oidc_auth"`
+	LDAPAuth        *LDAPAuthConfig        `yaml:"ldap_auth"        json:"ldap_auth"`
 	Models          []ModelConfig          `yaml:"models"           json:"models"`
 	VectorDatabase  *VectorDatabaseConfig  `yaml:"vector_database"  json:"vector_database"`
 	DocReader       *DocReaderConfig       `yaml:"docreader"        json:"docreader"`
@@ -328,6 +330,22 @@ type OIDCAuthConfig struct {
 	UserInfoMapping       *OIDCUserInfoMapping `yaml:"user_info_mapping"      json:"user_info_mapping"`
 }
 
+// LDAPAuthConfig configures direct LDAP/Active Directory password
+// authentication. The service account is used to search for the user; the
+// returned DN is then bound with the submitted password.
+type LDAPAuthConfig struct {
+	Enable            bool   `yaml:"enable"                    json:"enable"`
+	URL               string `yaml:"url"                       json:"url"`
+	BindDN            string `yaml:"bind_dn"                   json:"bind_dn"`
+	BindPassword      string `yaml:"bind_password"             json:"-"`
+	BaseDN            string `yaml:"base_dn"                   json:"base_dn"`
+	UserFilter        string `yaml:"user_filter"               json:"user_filter"`
+	UsernameAttribute string `yaml:"username_attribute"         json:"username_attribute"`
+	EmailAttribute    string `yaml:"email_attribute"            json:"email_attribute"`
+	AutoProvision     bool   `yaml:"auto_provision"             json:"auto_provision"`
+	StartTLS          bool   `yaml:"start_tls"                  json:"start_tls"`
+}
+
 // PromptTemplateI18n holds localized name and description for a prompt template.
 type PromptTemplateI18n struct {
 	Name        string `yaml:"name"        json:"name"`
@@ -588,6 +606,7 @@ func LoadConfig() (*Config, error) {
 
 	// Validate configuration values
 	applyOIDCEnvOverrides(&cfg)
+	applyLDAPEnvOverrides(&cfg)
 	applyAgentEnvOverrides(&cfg)
 	applyKnowledgeBaseEnvOverrides(&cfg)
 	applyAuthAndTenantDefaults(&cfg)
@@ -633,6 +652,22 @@ func ValidateConfig(cfg *Config) error {
 		if strings.TrimSpace(cfg.OIDCAuth.DiscoveryURL) == "" &&
 			(strings.TrimSpace(cfg.OIDCAuth.AuthorizationEndpoint) == "" || strings.TrimSpace(cfg.OIDCAuth.TokenEndpoint) == "") {
 			errs = append(errs, "oidc_auth.discovery_url or both oidc_auth.authorization_endpoint and oidc_auth.token_endpoint are required when OIDC is enabled")
+		}
+	}
+	if cfg.LDAPAuth != nil && cfg.LDAPAuth.Enable {
+		ldapURL, parseErr := url.Parse(strings.TrimSpace(cfg.LDAPAuth.URL))
+		if parseErr != nil || ldapURL.Hostname() == "" || ldapURL.User != nil || ldapURL.Path != "" || ldapURL.RawQuery != "" ||
+			(ldapURL.Scheme != "ldaps" && !(ldapURL.Scheme == "ldap" && cfg.LDAPAuth.StartTLS)) {
+			errs = append(errs, "ldap_auth.url must use ldaps:// or ldap:// with start_tls=true")
+		}
+		if strings.TrimSpace(cfg.LDAPAuth.BaseDN) == "" {
+			errs = append(errs, "ldap_auth.base_dn is required when LDAP is enabled")
+		}
+		if strings.TrimSpace(cfg.LDAPAuth.BindDN) == "" || cfg.LDAPAuth.BindPassword == "" {
+			errs = append(errs, "ldap_auth.bind_dn and bind_password are required when LDAP is enabled")
+		}
+		if !strings.Contains(cfg.LDAPAuth.UserFilter, "{username}") {
+			errs = append(errs, "ldap_auth.user_filter must contain {username}")
 		}
 	}
 
@@ -756,6 +791,42 @@ func applyOIDCEnvOverrides(cfg *Config) {
 	}
 	if cfg.OIDCAuth.DiscoveryURL == "" && cfg.OIDCAuth.IssuerURL != "" {
 		cfg.OIDCAuth.DiscoveryURL = strings.TrimRight(cfg.OIDCAuth.IssuerURL, "/") + "/.well-known/openid-configuration"
+	}
+}
+
+func applyLDAPEnvOverrides(cfg *Config) {
+	if cfg.LDAPAuth == nil {
+		cfg.LDAPAuth = &LDAPAuthConfig{}
+	}
+	set := func(name string, dst *string) {
+		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+			*dst = value
+		}
+	}
+	if value := strings.TrimSpace(os.Getenv("LDAP_AUTH_ENABLE")); value != "" {
+		cfg.LDAPAuth.Enable = strings.EqualFold(value, "true")
+	}
+	set("LDAP_AUTH_URL", &cfg.LDAPAuth.URL)
+	set("LDAP_AUTH_BIND_DN", &cfg.LDAPAuth.BindDN)
+	set("LDAP_AUTH_BIND_PASSWORD", &cfg.LDAPAuth.BindPassword)
+	set("LDAP_AUTH_BASE_DN", &cfg.LDAPAuth.BaseDN)
+	set("LDAP_AUTH_USER_FILTER", &cfg.LDAPAuth.UserFilter)
+	set("LDAP_AUTH_USERNAME_ATTRIBUTE", &cfg.LDAPAuth.UsernameAttribute)
+	set("LDAP_AUTH_EMAIL_ATTRIBUTE", &cfg.LDAPAuth.EmailAttribute)
+	if value := strings.TrimSpace(os.Getenv("LDAP_AUTH_AUTO_PROVISION")); value != "" {
+		cfg.LDAPAuth.AutoProvision = strings.EqualFold(value, "true")
+	}
+	if value := strings.TrimSpace(os.Getenv("LDAP_AUTH_STARTTLS")); value != "" {
+		cfg.LDAPAuth.StartTLS = strings.EqualFold(value, "true")
+	}
+	if cfg.LDAPAuth.UserFilter == "" {
+		cfg.LDAPAuth.UserFilter = "(&(objectClass=person)(|(mail={username})(uid={username})(sAMAccountName={username})))"
+	}
+	if cfg.LDAPAuth.UsernameAttribute == "" {
+		cfg.LDAPAuth.UsernameAttribute = "uid"
+	}
+	if cfg.LDAPAuth.EmailAttribute == "" {
+		cfg.LDAPAuth.EmailAttribute = "mail"
 	}
 }
 

@@ -23,6 +23,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	apprepo "github.com/Tencent/WeKnora/internal/application/repository"
+	ldapauth "github.com/Tencent/WeKnora/internal/auth"
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/types"
@@ -98,12 +99,13 @@ func getJwtSecret() string {
 
 // userService implements the UserService interface
 type userService struct {
-	userRepo         interfaces.UserRepository
-	tokenRepo        interfaces.AuthTokenRepository
-	tenantService    interfaces.TenantService
-	memberService    interfaces.TenantMemberService
-	config           *config.Config
-	systemSettingSvc interfaces.SystemSettingService
+	userRepo          interfaces.UserRepository
+	tokenRepo         interfaces.AuthTokenRepository
+	tenantService     interfaces.TenantService
+	memberService     interfaces.TenantMemberService
+	config            *config.Config
+	systemSettingSvc  interfaces.SystemSettingService
+	ldapAuthenticator func(string, string, *config.LDAPAuthConfig) (*ldapauth.LDAPIdentity, error)
 }
 
 // NewUserService creates a new user service instance
@@ -187,6 +189,7 @@ func (s *userService) Register(ctx context.Context, req *types.RegisterRequest) 
 		Username:     req.Username,
 		Email:        req.Email,
 		PasswordHash: string(hashedPassword),
+		LDAPSubject:  req.LDAPSubject,
 		TenantID:     0,
 		IsActive:     true,
 		CreatedAt:    time.Now(),
@@ -228,7 +231,6 @@ func (s *userService) Register(ctx context.Context, req *types.RegisterRequest) 
 // Login authenticates a user and returns tokens
 func (s *userService) Login(ctx context.Context, req *types.LoginRequest) (*types.LoginResponse, error) {
 	logger.Info(ctx, "Start user login")
-	// Get user by email
 	user, err := s.userRepo.GetUserByEmail(ctx, req.Email)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to get user by email: %v", err)
@@ -254,7 +256,6 @@ func (s *userService) Login(ctx context.Context, req *types.LoginRequest) (*type
 		}, nil
 	}
 
-	// Verify password
 	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password))
 	if err != nil {
 		logger.Warn(ctx, "Password verification failed")
@@ -264,7 +265,10 @@ func (s *userService) Login(ctx context.Context, req *types.LoginRequest) (*type
 		}, nil
 	}
 	logger.Info(ctx, "Password verification successful")
+	return s.loginAuthenticatedUser(ctx, user)
+}
 
+func (s *userService) loginAuthenticatedUser(ctx context.Context, user *types.User) (*types.LoginResponse, error) {
 	// Generate tokens. Resolve the target tenant once so the JWT claim
 	// and the tenant we return below agree — otherwise an honoured
 	// "last active tenant" preference would mint a token for tenant N

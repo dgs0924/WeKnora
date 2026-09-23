@@ -92,6 +92,9 @@ type User struct {
 	Email string `json:"email"      gorm:"type:varchar(255);uniqueIndex;not null"`
 	// Hashed password of the user
 	PasswordHash string `json:"-"          gorm:"type:varchar(255);not null"`
+	// LDAPSubject binds a local account to one directory entry. Nil means a
+	// local/OIDC account and must never be matched by LDAP email alone.
+	LDAPSubject *string `json:"-" gorm:"column:ldap_subject;type:text;uniqueIndex"`
 	// Avatar URL of the user
 	Avatar string `json:"avatar"     gorm:"type:varchar(500)"`
 	// Workspace ID that the user belongs to
@@ -146,6 +149,11 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required,min=6"`
 }
 
+type LDAPLoginRequest struct {
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
 type OIDCAuthURLResponse struct {
 	Success             bool   `json:"success"`
 	ProviderDisplayName string `json:"provider_display_name,omitempty"`
@@ -198,6 +206,7 @@ type RegisterRequest struct {
 	// own tenancy semantics. Empty preserves the historical behaviour and is
 	// treated as create_personal by UserService.Register.
 	TenantProvisioning TenantProvisioningMode `json:"-"`
+	LDAPSubject        *string                `json:"-"`
 }
 
 // AdminCreateUserRequest is the payload for a SystemAdmin provisioning a
