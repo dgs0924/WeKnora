@@ -12,6 +12,9 @@ export default {
     userFilter: '사용자 필터', userFilterPlaceholder: '(&(objectClass=person)(uid={username}))', userFilterHint: '{username}을 포함해야 하며 로그인 이름은 검색 전에 안전하게 이스케이프됩니다.',
     usernameAttribute: '사용자 이름 속성', usernameAttributePlaceholder: 'uid 또는 sAMAccountName', emailAttribute: '이메일 속성', emailAttributePlaceholder: 'mail',
     save: '구성 저장', saving: '저장 중...', saveSuccess: 'LDAP 구성을 저장했습니다', saveFailed: 'LDAP 구성 저장에 실패했습니다',
+    testConnection: '연결 테스트', testingConnection: '테스트 중...', testSuccess: '테스트 성공 ({stage})', testFailed: '테스트 실패 ({stage})',
+    testSuccessToast: 'LDAP 연결 테스트에 성공했습니다', testFailedToast: 'LDAP 연결 테스트에 실패했습니다', testRequestFailed: 'LDAP 연결 테스트를 제출할 수 없습니다. 구성을 확인하고 다시 시도하세요.',
+    testStageConfig: '구성 검증', testStageConnect: '디렉터리 서버 연결', testStageTLS: 'TLS 보안 연결', testStageBind: '디렉터리 검색 계정 바인딩', testStageSearch: '사용자 Base DN 읽기', testStageReady: '연결 검증 완료', testStageFallback: '연결 단계: {stage}',
     reset: '환경 구성 복원', resetConfirm: '데이터베이스 LDAP 재정의를 삭제하고 환경 구성을 복원합니다. 계속하시겠습니까?', resetSuccess: '환경 구성을 복원했습니다', resetFailed: 'LDAP 구성 복원에 실패했습니다',
   },
   localBrowser: {

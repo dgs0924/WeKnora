@@ -12,6 +12,9 @@ export default {
     userFilter: 'ユーザーフィルター', userFilterPlaceholder: '(&(objectClass=person)(uid={username}))', userFilterHint: '{username} を含める必要があります。ログイン名は検索前に安全にエスケープされます。',
     usernameAttribute: 'ユーザー名属性', usernameAttributePlaceholder: 'uid または sAMAccountName', emailAttribute: 'メール属性', emailAttributePlaceholder: 'mail',
     save: '設定を保存', saving: '保存中...', saveSuccess: 'LDAP 設定を保存しました', saveFailed: 'LDAP 設定の保存に失敗しました',
+    testConnection: '接続テスト', testingConnection: 'テスト中...', testSuccess: 'テスト成功（{stage}）', testFailed: 'テスト失敗（{stage}）',
+    testSuccessToast: 'LDAP 接続テストに成功しました', testFailedToast: 'LDAP 接続テストに失敗しました', testRequestFailed: 'LDAP 接続テストを送信できません。設定を確認して再試行してください。',
+    testStageConfig: '設定の検証', testStageConnect: 'ディレクトリへの接続', testStageTLS: 'TLS 接続', testStageBind: 'ディレクトリ検索アカウントのバインド', testStageSearch: 'ユーザー Base DN の読み取り', testStageReady: '接続検証の完了', testStageFallback: '接続ステージ：{stage}',
     reset: '環境設定を復元', resetConfirm: 'データベースの LDAP 上書きを削除し、環境設定を復元します。続行しますか？', resetSuccess: '環境設定を復元しました', resetFailed: 'LDAP 設定の復元に失敗しました',
   },
   localBrowser: {

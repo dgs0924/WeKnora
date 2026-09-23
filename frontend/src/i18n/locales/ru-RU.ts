@@ -12,6 +12,9 @@ export default {
     userFilter: 'Фильтр пользователя', userFilterPlaceholder: '(&(objectClass=person)(uid={username}))', userFilterHint: 'Должен содержать {username}; имя входа безопасно экранируется перед поиском.',
     usernameAttribute: 'Атрибут имени пользователя', usernameAttributePlaceholder: 'uid или sAMAccountName', emailAttribute: 'Атрибут email', emailAttributePlaceholder: 'mail',
     save: 'Сохранить конфигурацию', saving: 'Сохранение...', saveSuccess: 'Конфигурация LDAP сохранена', saveFailed: 'Не удалось сохранить конфигурацию LDAP',
+    testConnection: 'Проверить подключение', testingConnection: 'Проверка...', testSuccess: 'Проверка успешна ({stage})', testFailed: 'Проверка не удалась ({stage})',
+    testSuccessToast: 'Проверка подключения LDAP успешна', testFailedToast: 'Проверка подключения LDAP не удалась', testRequestFailed: 'Не удалось отправить проверку LDAP. Проверьте конфигурацию и повторите попытку.',
+    testStageConfig: 'проверка конфигурации', testStageConnect: 'подключение к серверу каталога', testStageTLS: 'TLS-соединение', testStageBind: 'привязка учётной записи поиска', testStageSearch: 'чтение Base DN пользователей', testStageReady: 'проверка подключения завершена', testStageFallback: 'этап подключения: {stage}',
     reset: 'Восстановить конфигурацию окружения', resetConfirm: 'Будет удалено переопределение LDAP из базы данных и восстановлена конфигурация окружения. Продолжить?', resetSuccess: 'Конфигурация окружения восстановлена', resetFailed: 'Не удалось восстановить конфигурацию LDAP',
   },
   localBrowser: {

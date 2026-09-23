@@ -300,6 +300,7 @@ func RegisterSystemAdminRoutes(
 		adminRoutes.DELETE("/api-keys/:key_id", handler.DeletePlatformAPIKey)
 		adminRoutes.GET("/ldap", handler.GetLDAPConfig)
 		adminRoutes.PUT("/ldap", handler.UpdateLDAPConfig)
+		adminRoutes.POST("/ldap/test", handler.TestLDAPConfig)
 		adminRoutes.DELETE("/ldap", handler.ResetLDAPConfig)
 
 		// P1: platform-wide system settings (DB-backed runtime tunables).

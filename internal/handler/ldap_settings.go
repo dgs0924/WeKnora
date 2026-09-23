@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Tencent/WeKnora/internal/application/service"
+	ldapauth "github.com/Tencent/WeKnora/internal/auth"
 	"github.com/Tencent/WeKnora/internal/config"
 )
 
@@ -53,21 +54,41 @@ func (h *SystemHandler) UpdateLDAPConfig(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Existing LDAP secret cannot be read; enter a new password"})
 		return
 	}
-	password := req.BindPassword
-	if password == "" && current != nil {
-		password = current.BindPassword
-	}
-	cfg := &config.LDAPAuthConfig{
-		Enable: req.Enabled, URL: strings.TrimSpace(req.URL), BindDN: strings.TrimSpace(req.BindDN),
-		BindPassword: password, BaseDN: strings.TrimSpace(req.BaseDN), UserFilter: strings.TrimSpace(req.UserFilter),
-		UsernameAttribute: strings.TrimSpace(req.UsernameAttribute), EmailAttribute: strings.TrimSpace(req.EmailAttribute),
-		AutoProvision: req.AutoProvision, StartTLS: req.StartTLS,
-	}
+	cfg := ldapConfigFromRequest(req, current)
 	if err := service.SaveLDAPConfig(c.Request.Context(), h.systemSettingSvc, cfg); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, ldapConfigResponse(cfg))
+}
+
+func ldapConfigFromRequest(req ldapConfigUpdateRequest, current *config.LDAPAuthConfig) *config.LDAPAuthConfig {
+	password := req.BindPassword
+	if password == "" && current != nil {
+		password = current.BindPassword
+	}
+	return &config.LDAPAuthConfig{
+		Enable: req.Enabled, URL: strings.TrimSpace(req.URL), BindDN: strings.TrimSpace(req.BindDN),
+		BindPassword: password, BaseDN: strings.TrimSpace(req.BaseDN), UserFilter: strings.TrimSpace(req.UserFilter),
+		UsernameAttribute: strings.TrimSpace(req.UsernameAttribute), EmailAttribute: strings.TrimSpace(req.EmailAttribute),
+		AutoProvision: req.AutoProvision, StartTLS: req.StartTLS,
+	}
+}
+
+// TestLDAPConfig probes the submitted form without persisting it. The caller
+// must be a SystemAdmin (enforced by the parent route group).
+func (h *SystemHandler) TestLDAPConfig(c *gin.Context) {
+	var req ldapConfigUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid LDAP configuration"})
+		return
+	}
+	current, err := service.ResolveLDAPConfig(c.Request.Context(), h.cfg, h.systemSettingSvc)
+	if err != nil && req.BindPassword == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Existing LDAP secret cannot be read; enter a new password"})
+		return
+	}
+	c.JSON(http.StatusOK, ldapauth.ProbeLDAPConnection(ldapConfigFromRequest(req, current)))
 }
 
 func (h *SystemHandler) ResetLDAPConfig(c *gin.Context) {

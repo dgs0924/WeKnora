@@ -15,6 +15,9 @@ export default {
     userFilter: 'User filter', userFilterPlaceholder: '(&(objectClass=person)(uid={username}))', userFilterHint: 'Must contain {username}; the login name is safely escaped before searching.',
     usernameAttribute: 'Username attribute', usernameAttributePlaceholder: 'uid or sAMAccountName', emailAttribute: 'Email attribute', emailAttributePlaceholder: 'mail',
     save: 'Save configuration', saving: 'Saving...', saveSuccess: 'LDAP configuration saved', saveFailed: 'Failed to save LDAP configuration',
+    testConnection: 'Test connection', testingConnection: 'Testing...', testSuccess: 'Test passed ({stage})', testFailed: 'Test failed ({stage})',
+    testSuccessToast: 'LDAP connection test passed', testFailedToast: 'LDAP connection test failed', testRequestFailed: 'Unable to submit the LDAP connection test. Check the configuration and try again.',
+    testStageConfig: 'configuration validation', testStageConnect: 'directory connection', testStageTLS: 'TLS negotiation', testStageBind: 'directory search account binding', testStageSearch: 'user base DN lookup', testStageReady: 'connection verification', testStageFallback: 'connection stage: {stage}',
     reset: 'Restore environment configuration', resetConfirm: 'This removes the database LDAP override and restores the environment configuration. Continue?', resetSuccess: 'Environment configuration restored', resetFailed: 'Failed to restore LDAP configuration',
   },
   localBrowser: {

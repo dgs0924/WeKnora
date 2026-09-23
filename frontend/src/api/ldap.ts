@@ -1,4 +1,4 @@
-import { del, get, put } from '@/utils/request'
+import { del, get, post, put } from '@/utils/request'
 
 /**
  * LDAP configuration deliberately omits its bind password. The server returns
@@ -23,6 +23,13 @@ export interface UpdateLDAPConfig extends Omit<LDAPConfig, 'has_bind_password'> 
   bind_password?: string
 }
 
+/** Result returned by a non-persisting LDAP configuration probe. */
+export interface LDAPConnectionTestResult {
+  ok: boolean
+  stage: string
+  message: string
+}
+
 const endpoint = '/api/v1/system/admin/ldap'
 
 export async function getLDAPConfig(): Promise<LDAPConfig> {
@@ -33,6 +40,16 @@ export async function getLDAPConfig(): Promise<LDAPConfig> {
 export async function updateLDAPConfig(config: UpdateLDAPConfig): Promise<LDAPConfig> {
   const response = await put(endpoint, config)
   return response as unknown as LDAPConfig
+}
+
+/**
+ * Verify the current form values without changing the saved LDAP
+ * configuration. An omitted bind password lets the server reuse its saved or
+ * environment-provided secret.
+ */
+export async function testLDAPConnection(config: UpdateLDAPConfig): Promise<LDAPConnectionTestResult> {
+  const response = await post(`${endpoint}/test`, config)
+  return response as unknown as LDAPConnectionTestResult
 }
 
 export async function resetLDAPConfig(): Promise<void> {

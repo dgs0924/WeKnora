@@ -13,6 +13,9 @@ export default {
     userFilter: '用户过滤器', userFilterPlaceholder: '(&(objectClass=person)(uid={username}))', userFilterHint: '必须包含 {username}，登录名会在提交查询前安全转义。',
     usernameAttribute: '用户名属性', usernameAttributePlaceholder: 'uid 或 sAMAccountName', emailAttribute: '邮箱属性', emailAttributePlaceholder: 'mail',
     save: '保存配置', saving: '正在保存...', saveSuccess: 'LDAP 配置已保存', saveFailed: '保存 LDAP 配置失败',
+    testConnection: '测试连接', testingConnection: '正在测试...', testSuccess: '测试成功（{stage}）', testFailed: '测试失败（{stage}）',
+    testSuccessToast: 'LDAP 连接测试成功', testFailedToast: 'LDAP 连接测试失败', testRequestFailed: '无法提交 LDAP 连接测试，请检查配置后重试',
+    testStageConfig: '配置校验', testStageConnect: '连接目录服务器', testStageTLS: 'TLS 安全连接', testStageBind: '目录搜索账号绑定', testStageSearch: '读取用户 Base DN', testStageReady: '连接验证完成', testStageFallback: '连接阶段：{stage}',
     reset: '恢复环境变量配置', resetConfirm: '将删除数据库中的 LDAP 覆盖配置，并恢复到环境变量配置。确定继续吗？', resetSuccess: '已恢复环境变量配置', resetFailed: '恢复 LDAP 配置失败',
   },
   localBrowser: {

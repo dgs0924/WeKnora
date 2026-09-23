@@ -39,6 +39,7 @@ func TestLDAPSettingsEndpointRedactsSecretAndAppliesRuntimeConfig(t *testing.T) 
 	r := gin.New()
 	r.GET("/ldap", h.GetLDAPConfig)
 	r.PUT("/ldap", h.UpdateLDAPConfig)
+	r.POST("/ldap/test", h.TestLDAPConfig)
 	r.DELETE("/ldap", h.ResetLDAPConfig)
 
 	request := `{"enabled":true,"url":"ldaps://directory.example.com:636","bind_dn":"cn=service,dc=example,dc=com","bind_password":"test-directory-password","base_dn":"dc=example,dc=com","user_filter":"(uid={username})","username_attribute":"uid","email_attribute":"mail","auto_provision":true}`
@@ -62,5 +63,22 @@ func TestLDAPSettingsEndpointRedactsSecretAndAppliesRuntimeConfig(t *testing.T) 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/ldap", nil))
 	if w.Code != http.StatusOK || settings.value != "" || !strings.Contains(w.Body.String(), `"enabled":false`) {
 		t.Fatalf("LDAP config reset failed: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestLDAPConnectionProbeUsesUnsavedFormAndDoesNotPersistSecret(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	settings := &ldapSettingServiceStub{}
+	h := &SystemHandler{cfg: &config.Config{LDAPAuth: &config.LDAPAuthConfig{}}, systemSettingSvc: settings}
+	r := gin.New()
+	r.POST("/ldap/test", h.TestLDAPConfig)
+	w := httptest.NewRecorder()
+	body := `{"enabled":true,"url":"ldap://directory.example.com:389","bind_dn":"cn=service,dc=example,dc=com","bind_password":"test-directory-password","base_dn":"dc=example,dc=com","user_filter":"(uid={username})"}`
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/ldap/test", strings.NewReader(body)))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"stage":"config"`) {
+		t.Fatalf("probe should report the StartTLS configuration failure: status=%d body=%s", w.Code, w.Body.String())
+	}
+	if settings.value != "" || strings.Contains(w.Body.String(), "test-directory-password") {
+		t.Fatal("probe persisted or echoed the submitted bind password")
 	}
 }
