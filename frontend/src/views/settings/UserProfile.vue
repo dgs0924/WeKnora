@@ -73,67 +73,9 @@
           <p class="desc">{{ $t('userProfile.ldapLink.description') }}</p>
         </div>
         <div class="setting-control">
-          <t-popup
-            v-model="ldapLinkPopupVisible"
-            trigger="click"
-            placement="bottom-end"
-            destroy-on-close
-            overlay-class-name="wk-popover user-profile-password-popup-overlay"
-          >
-            <t-button theme="primary" variant="outline" size="small">
-              {{ $t('userProfile.ldapLink.action') }}
-            </t-button>
-            <template #content>
-              <div class="password-popup-inner" @click.stop>
-                <div class="password-popup-title">{{ $t('userProfile.ldapLink.title') }}</div>
-                <p class="password-popup-hint">{{ $t('userProfile.ldapLink.hint') }}</p>
-                <t-form
-                  ref="ldapLinkFormRef"
-                  :data="ldapLinkForm"
-                  :rules="ldapLinkRules"
-                  label-align="top"
-                  class="password-popup-form"
-                  @submit.prevent
-                >
-                  <t-form-item :label="$t('userProfile.ldapLink.localPasswordLabel')" name="localPassword">
-                    <t-input
-                      v-model="ldapLinkForm.localPassword"
-                      type="password"
-                      autocomplete="current-password"
-                      :disabled="ldapLinkSubmitting"
-                      :placeholder="$t('userProfile.ldapLink.localPasswordPlaceholder')"
-                    />
-                  </t-form-item>
-                  <t-form-item :label="$t('userProfile.ldapLink.usernameLabel')" name="username">
-                    <t-input
-                      v-model="ldapLinkForm.username"
-                      autocomplete="username"
-                      :disabled="ldapLinkSubmitting"
-                      :placeholder="$t('userProfile.ldapLink.usernamePlaceholder')"
-                    />
-                  </t-form-item>
-                  <t-form-item :label="$t('userProfile.ldapLink.ldapPasswordLabel')" name="password">
-                    <t-input
-                      v-model="ldapLinkForm.password"
-                      type="password"
-                      autocomplete="off"
-                      :disabled="ldapLinkSubmitting"
-                      :placeholder="$t('userProfile.ldapLink.ldapPasswordPlaceholder')"
-                      @enter="submitLDAPLink"
-                    />
-                  </t-form-item>
-                </t-form>
-                <div class="password-popup-footer">
-                  <t-button variant="outline" :disabled="ldapLinkSubmitting" @click="closeLDAPLinkPopup">
-                    {{ $t('common.cancel') }}
-                  </t-button>
-                  <t-button theme="primary" :loading="ldapLinkSubmitting" @click="submitLDAPLink">
-                    {{ $t('userProfile.ldapLink.submit') }}
-                  </t-button>
-                </div>
-              </div>
-            </template>
-          </t-popup>
+          <t-button theme="primary" variant="outline" size="small" @click="ldapLinkPopupVisible = true">
+            {{ $t('userProfile.ldapLink.action') }}
+          </t-button>
         </div>
       </div>
 
@@ -237,6 +179,71 @@
         </div>
       </div>
     </div>
+
+    <t-dialog
+      v-model:visible="ldapLinkPopupVisible"
+      :header="$t('userProfile.ldapLink.title')"
+      :footer="false"
+      width="min(480px, calc(100vw - 32px))"
+      placement="center"
+      attach="body"
+      :z-index="3100"
+      :close-on-overlay-click="!ldapLinkSubmitting"
+      :close-on-esc-keydown="!ldapLinkSubmitting"
+      :close-btn="!ldapLinkSubmitting"
+      destroy-on-close
+    >
+      <div class="ldap-link-dialog">
+        <p class="ldap-link-dialog__hint">{{ $t('userProfile.ldapLink.hint') }}</p>
+        <t-form
+          ref="ldapLinkFormRef"
+          :data="ldapLinkForm"
+          :rules="ldapLinkRules"
+          label-align="top"
+          class="ldap-link-dialog__form"
+          @submit.prevent
+        >
+          <t-form-item :label="$t('userProfile.ldapLink.localPasswordLabel')" name="localPassword">
+            <t-input
+              v-model="ldapLinkForm.localPassword"
+              type="password"
+              size="large"
+              autocomplete="current-password"
+              :disabled="ldapLinkSubmitting"
+              :placeholder="$t('userProfile.ldapLink.localPasswordPlaceholder')"
+            />
+          </t-form-item>
+          <t-form-item :label="$t('userProfile.ldapLink.usernameLabel')" name="username">
+            <t-input
+              v-model="ldapLinkForm.username"
+              size="large"
+              autocomplete="username"
+              :disabled="ldapLinkSubmitting"
+              :placeholder="$t('userProfile.ldapLink.usernamePlaceholder')"
+            />
+          </t-form-item>
+          <t-form-item :label="$t('userProfile.ldapLink.ldapPasswordLabel')" name="password">
+            <t-input
+              v-model="ldapLinkForm.password"
+              type="password"
+              size="large"
+              autocomplete="off"
+              :disabled="ldapLinkSubmitting"
+              :placeholder="$t('userProfile.ldapLink.ldapPasswordPlaceholder')"
+              @enter="submitLDAPLink"
+            />
+          </t-form-item>
+        </t-form>
+        <div class="ldap-link-dialog__actions">
+          <t-button variant="outline" :disabled="ldapLinkSubmitting" @click="closeLDAPLinkPopup">
+            {{ $t('common.cancel') }}
+          </t-button>
+          <t-button theme="primary" :loading="ldapLinkSubmitting" @click="submitLDAPLink">
+            {{ $t('userProfile.ldapLink.submit') }}
+          </t-button>
+        </div>
+      </div>
+    </t-dialog>
   </div>
 </template>
 
@@ -541,6 +548,45 @@ onMounted(() => {
 .password-mask {
   letter-spacing: 0.12em;
   color: var(--td-text-color-secondary);
+}
+
+.ldap-link-dialog {
+  min-width: 0;
+}
+
+.ldap-link-dialog__hint {
+  margin: 0 0 22px;
+  padding: 12px 14px;
+  border-radius: var(--app-radius-md);
+  background: var(--td-bg-color-secondarycontainer);
+  color: var(--td-text-color-secondary);
+  font-size: var(--app-text-md);
+  line-height: 1.55;
+}
+
+.ldap-link-dialog__form {
+  :deep(.t-form__item) {
+    margin-bottom: 18px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+}
+
+.ldap-link-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--td-component-stroke);
+}
+
+@media (max-width: 540px) {
+  .ldap-link-dialog__actions :deep(.t-button) {
+    flex: 1;
+  }
 }
 
 .password-popup-inner {
