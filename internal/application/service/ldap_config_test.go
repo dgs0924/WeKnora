@@ -28,7 +28,7 @@ func TestLDAPConfigSavesEncryptedSecretAndResolvesRuntimeOverride(t *testing.T) 
 	want := &config.LDAPAuthConfig{
 		Enable: true, URL: "ldaps://directory.example.com:636", BindDN: "cn=service,dc=example,dc=com",
 		BindPassword: "directory-secret", BaseDN: "dc=example,dc=com", UserFilter: "(uid={username})",
-		UsernameAttribute: "uid", EmailAttribute: "mail", AutoProvision: true,
+		UsernameAttribute: "uid", EmailAttribute: "mail", AutoProvision: true, AllowPlaintext: true,
 	}
 	if err := SaveLDAPConfig(context.Background(), settings, want); err != nil {
 		t.Fatal(err)
@@ -37,7 +37,7 @@ func TestLDAPConfigSavesEncryptedSecretAndResolvesRuntimeOverride(t *testing.T) 
 		t.Fatal("stored LDAP configuration exposed the bind password")
 	}
 	got, err := ResolveLDAPConfig(context.Background(), &config.Config{}, settings)
-	if err != nil || got.BindPassword != want.BindPassword || !got.Enable || !got.AutoProvision {
+	if err != nil || got.BindPassword != want.BindPassword || !got.Enable || !got.AutoProvision || !got.AllowPlaintext {
 		t.Fatalf("runtime LDAP config was not restored: enabled=%v err=%v", got != nil && got.Enable, err)
 	}
 }

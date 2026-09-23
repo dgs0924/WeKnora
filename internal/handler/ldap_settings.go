@@ -22,6 +22,9 @@ type ldapConfigUpdateRequest struct {
 	EmailAttribute    string `json:"email_attribute"`
 	AutoProvision     bool   `json:"auto_provision"`
 	StartTLS          bool   `json:"start_tls"`
+	AllowPlaintext    bool   `json:"allow_plaintext"`
+	TLSServerName     string `json:"tls_server_name"`
+	TLSCAPEM          string `json:"tls_ca_pem"`
 }
 
 func ldapConfigResponse(cfg *config.LDAPAuthConfig) gin.H {
@@ -29,7 +32,8 @@ func ldapConfigResponse(cfg *config.LDAPAuthConfig) gin.H {
 		"enabled": cfg.Enable, "url": cfg.URL, "bind_dn": cfg.BindDN,
 		"base_dn": cfg.BaseDN, "user_filter": cfg.UserFilter,
 		"username_attribute": cfg.UsernameAttribute, "email_attribute": cfg.EmailAttribute,
-		"auto_provision": cfg.AutoProvision, "start_tls": cfg.StartTLS,
+		"auto_provision": cfg.AutoProvision, "start_tls": cfg.StartTLS, "allow_plaintext": cfg.AllowPlaintext,
+		"tls_server_name": cfg.TLSServerName, "tls_ca_pem": cfg.TLSCAPEM,
 		"has_bind_password": cfg.BindPassword != "",
 	}
 }
@@ -71,7 +75,8 @@ func ldapConfigFromRequest(req ldapConfigUpdateRequest, current *config.LDAPAuth
 		Enable: req.Enabled, URL: strings.TrimSpace(req.URL), BindDN: strings.TrimSpace(req.BindDN),
 		BindPassword: password, BaseDN: strings.TrimSpace(req.BaseDN), UserFilter: strings.TrimSpace(req.UserFilter),
 		UsernameAttribute: strings.TrimSpace(req.UsernameAttribute), EmailAttribute: strings.TrimSpace(req.EmailAttribute),
-		AutoProvision: req.AutoProvision, StartTLS: req.StartTLS,
+		AutoProvision: req.AutoProvision, StartTLS: req.StartTLS, AllowPlaintext: req.AllowPlaintext,
+		TLSServerName: strings.TrimSpace(req.TLSServerName), TLSCAPEM: strings.TrimSpace(req.TLSCAPEM),
 	}
 }
 

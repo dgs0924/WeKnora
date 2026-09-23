@@ -61,6 +61,32 @@
               <span>{{ t('ldapSettings.startTLSDescription') }}</span>
             </div>
           </t-form-item>
+          <div v-if="isPlaintextLDAP" class="ldap-settings__plaintext">
+            <t-alert theme="warning" :message="t('ldapSettings.plaintextWarning')" />
+            <t-form-item :label="t('ldapSettings.allowPlaintext')">
+              <div class="ldap-settings__switch-field">
+                <t-switch v-model="form.allow_plaintext" :disabled="saving || testing" />
+                <span>{{ t('ldapSettings.allowPlaintextDescription') }}</span>
+              </div>
+            </t-form-item>
+          </div>
+          <t-form-item :label="t('ldapSettings.tlsServerName')">
+            <t-input
+              v-model="form.tls_server_name"
+              :placeholder="t('ldapSettings.tlsServerNamePlaceholder')"
+              :disabled="saving || testing"
+            />
+            <div class="ldap-settings__field-hint">{{ t('ldapSettings.tlsServerNameHint') }}</div>
+          </t-form-item>
+          <t-form-item :label="t('ldapSettings.tlsCAPEM')">
+            <t-textarea
+              v-model="form.tls_ca_pem"
+              :placeholder="t('ldapSettings.tlsCAPEMPlaceholder')"
+              :disabled="saving || testing"
+              :autosize="{ minRows: 4, maxRows: 8 }"
+            />
+            <div class="ldap-settings__field-hint">{{ t('ldapSettings.tlsCAPEMHint') }}</div>
+          </t-form-item>
         </section>
 
         <section class="settings-group">
@@ -164,10 +190,14 @@ const form = reactive<UpdateLDAPConfig>({
   email_attribute: 'mail',
   auto_provision: false,
   start_tls: false,
+  allow_plaintext: false,
+  tls_server_name: '',
+  tls_ca_pem: '',
 })
 
 const canSave = computed(() => !saving.value && !resetting.value && !testing.value)
 const canTest = computed(() => !saving.value && !resetting.value && !testing.value)
+const isPlaintextLDAP = computed(() => form.url.trim().toLowerCase().startsWith('ldap://') && !form.start_tls)
 const bindPasswordPlaceholder = computed(() => hasBindPassword.value
   ? t('ldapSettings.bindPasswordRetained')
   : t('ldapSettings.bindPasswordPlaceholder'))
@@ -199,12 +229,18 @@ function assignConfig(config: LDAPConfig) {
   form.email_attribute = config.email_attribute || ''
   form.auto_provision = config.auto_provision
   form.start_tls = config.start_tls
+  form.allow_plaintext = config.allow_plaintext === true
+  form.tls_server_name = config.tls_server_name || ''
+  form.tls_ca_pem = config.tls_ca_pem || ''
   hasBindPassword.value = config.has_bind_password
   bindPassword.value = ''
 }
 
 function currentPayload(): UpdateLDAPConfig {
   const payload: UpdateLDAPConfig = { ...form }
+  // A value only has meaning for plaintext ldap://. Clear it when StartTLS or
+  // LDAPS is selected so an old acknowledgement cannot outlive that mode.
+  if (!isPlaintextLDAP.value) payload.allow_plaintext = false
   if (bindPassword.value) payload.bind_password = bindPassword.value
   else delete payload.bind_password
   return payload
@@ -235,6 +271,14 @@ async function save() {
 }
 
 async function testConnection() {
+  if (isPlaintextLDAP.value && !form.allow_plaintext) {
+    testResult.value = {
+      ok: false,
+      stage: 'config',
+      message: t('ldapSettings.allowPlaintextDescription'),
+    }
+    return
+  }
   testing.value = true
   testResult.value = null
   try {
@@ -322,6 +366,10 @@ onMounted(load)
   color: var(--td-text-color-secondary);
   font-size: 12px;
   line-height: 18px;
+}
+
+.ldap-settings__plaintext :deep(.t-alert) {
+  margin-bottom: 12px;
 }
 
 .ldap-settings__attribute-grid {

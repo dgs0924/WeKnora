@@ -25,6 +25,9 @@ type storedLDAPConfig struct {
 	EmailAttribute    string `json:"email_attribute"`
 	AutoProvision     bool   `json:"auto_provision"`
 	StartTLS          bool   `json:"start_tls"`
+	AllowPlaintext    bool   `json:"allow_plaintext"`
+	TLSServerName     string `json:"tls_server_name"`
+	TLSCAPEM          string `json:"tls_ca_pem"`
 }
 
 // ResolveLDAPConfig reads the runtime override, falling back to the boot
@@ -62,7 +65,8 @@ func ResolveLDAPConfig(ctx context.Context, base *config.Config, settings interf
 		Enable: stored.Enable, URL: stored.URL, BindDN: stored.BindDN,
 		BindPassword: password, BaseDN: stored.BaseDN, UserFilter: stored.UserFilter,
 		UsernameAttribute: stored.UsernameAttribute, EmailAttribute: stored.EmailAttribute,
-		AutoProvision: stored.AutoProvision, StartTLS: stored.StartTLS,
+		AutoProvision: stored.AutoProvision, StartTLS: stored.StartTLS, AllowPlaintext: stored.AllowPlaintext,
+		TLSServerName: stored.TLSServerName, TLSCAPEM: stored.TLSCAPEM,
 	}, nil
 }
 
@@ -77,7 +81,8 @@ func SaveLDAPConfig(ctx context.Context, settings interfaces.SystemSettingServic
 		Enable: cfg.Enable, URL: cfg.URL, BindDN: cfg.BindDN,
 		BaseDN: cfg.BaseDN, UserFilter: cfg.UserFilter,
 		UsernameAttribute: cfg.UsernameAttribute, EmailAttribute: cfg.EmailAttribute,
-		AutoProvision: cfg.AutoProvision, StartTLS: cfg.StartTLS,
+		AutoProvision: cfg.AutoProvision, StartTLS: cfg.StartTLS, AllowPlaintext: cfg.AllowPlaintext,
+		TLSServerName: cfg.TLSServerName, TLSCAPEM: cfg.TLSCAPEM,
 	}
 	if cfg.BindPassword != "" {
 		key := utils.GetAESKey()

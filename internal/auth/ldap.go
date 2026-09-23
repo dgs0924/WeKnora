@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net"
@@ -59,6 +60,9 @@ func ProbeLDAPConnection(cfg *config.LDAPAuthConfig) ConnectionProbe {
 	if err != nil || len(result.Entries) != 1 {
 		return ConnectionProbe{Stage: "search", Message: "目录已连接，但用户 Base DN 无法读取，请核对搜索范围和服务账号权限"}
 	}
+	if strings.HasPrefix(check.URL, "ldap://") && !check.StartTLS {
+		return ConnectionProbe{OK: true, Stage: "ready", Message: "明文连接、服务账号绑定和 Base DN 读取成功；密码会在网络中明文传输，尚未验证用户密码"}
+	}
 	return ConnectionProbe{OK: true, Stage: "ready", Message: "连接、服务账号绑定和 Base DN 读取成功；尚未验证用户密码"}
 }
 
@@ -114,10 +118,13 @@ func connectAndBindService(cfg *config.LDAPAuthConfig) (*ldap.Conn, string, erro
 	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Path != "" {
 		return nil, "config", fmt.Errorf("invalid LDAP URL")
 	}
-	if parsed.Scheme != "ldaps" && !(parsed.Scheme == "ldap" && cfg.StartTLS) {
-		return nil, "config", errors.New("LDAP requires LDAPS or StartTLS")
+	if parsed.Scheme != "ldaps" && !(parsed.Scheme == "ldap" && (cfg.StartTLS || cfg.AllowPlaintext)) {
+		return nil, "config", errors.New("LDAP requires LDAPS, StartTLS, or an explicit plaintext allowance")
 	}
-	tlsConfig := &tls.Config{ServerName: parsed.Hostname(), MinVersion: tls.VersionTLS12}
+	tlsConfig, err := ldapTLSConfig(cfg, parsed)
+	if err != nil {
+		return nil, "tls", err
+	}
 	conn, err := ldap.DialURL(cfg.URL,
 		ldap.DialWithDialer(&net.Dialer{Timeout: 5 * time.Second}),
 		ldap.DialWithTLSConfig(tlsConfig))
@@ -139,6 +146,25 @@ func connectAndBindService(cfg *config.LDAPAuthConfig) (*ldap.Conn, string, erro
 		}
 	}
 	return conn, "ready", nil
+}
+
+func ldapTLSConfig(cfg *config.LDAPAuthConfig, parsed *url.URL) (*tls.Config, error) {
+	serverName := strings.TrimSpace(cfg.TLSServerName)
+	if serverName == "" {
+		serverName = parsed.Hostname()
+	}
+	tlsConfig := &tls.Config{ServerName: serverName, MinVersion: tls.VersionTLS12}
+	if pem := strings.TrimSpace(cfg.TLSCAPEM); pem != "" {
+		roots, err := x509.SystemCertPool()
+		if err != nil || roots == nil {
+			roots = x509.NewCertPool()
+		}
+		if !roots.AppendCertsFromPEM([]byte(pem)) {
+			return nil, errors.New("invalid LDAP CA certificate PEM")
+		}
+		tlsConfig.RootCAs = roots
+	}
+	return tlsConfig, nil
 }
 
 func uniqueStrings(values ...string) []string {

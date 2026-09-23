@@ -16,7 +16,9 @@ LDAP_AUTH_EMAIL_ATTRIBUTE=mail
 LDAP_AUTH_AUTO_PROVISION=true
 ```
 
-使用 AD 时，通常把 `LDAP_AUTH_USERNAME_ATTRIBUTE` 设为 `sAMAccountName`。服务账号需要有用户搜索权限。`LDAP_AUTH_URL` 也可使用 `ldap://...:389`，但必须同时设置 `LDAP_AUTH_STARTTLS=true`；服务端证书须受容器或宿主机的系统 CA 信任。不会使用明文 LDAP 传输密码。
+使用 AD 时，通常把 `LDAP_AUTH_USERNAME_ATTRIBUTE` 设为 `sAMAccountName`。服务账号需要有用户搜索权限。`LDAP_AUTH_URL` 也可使用 `ldap://...:389`；推荐同时设置 `LDAP_AUTH_STARTTLS=true`，此时需要验证目录证书。若明确选择内网明文 LDAP，可关闭 StartTLS 并开启 `LDAP_AUTH_ALLOW_PLAINTEXT=true`（默认关闭）；该模式不使用证书，但 Bind 密码和用户密码会在网络中以明文传输。
+
+若连接地址是 IP，但目录证书只包含域名，可在设置页填写“TLS 校验名称”（`LDAP_AUTH_TLS_SERVER_NAME`）为证书覆盖的域名；网络仍连接原 IP。自签名证书或私有 CA 可以粘贴到“受信任证书 PEM”（`LDAP_AUTH_TLS_CA_PEM`），系统会在系统 CA 的基础上信任该证书。两项都保持严格证书校验，不提供跳过验证开关。生产环境建议由目录服务安装与实际访问地址匹配的可信证书。
 
 请求体为 `{"username":"alice","password":"..."}`。成功响应与 `/auth/login` 相同，包含访问令牌、刷新令牌、用户和空间信息。认证配置接口 `/api/v1/auth/config` 的 `ldap_enabled` 指示该入口是否启用。
 

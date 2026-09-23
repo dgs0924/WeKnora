@@ -15,6 +15,9 @@ export interface LDAPConfig {
   email_attribute: string
   auto_provision: boolean
   start_tls: boolean
+  allow_plaintext: boolean
+  tls_server_name: string
+  tls_ca_pem: string
   has_bind_password: boolean
 }
 

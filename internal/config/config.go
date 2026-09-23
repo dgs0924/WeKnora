@@ -1,6 +1,7 @@
 package config
 
 import (
+	"crypto/x509"
 	"fmt"
 	"net/url"
 	"os"
@@ -344,6 +345,9 @@ type LDAPAuthConfig struct {
 	EmailAttribute    string `yaml:"email_attribute"            json:"email_attribute"`
 	AutoProvision     bool   `yaml:"auto_provision"             json:"auto_provision"`
 	StartTLS          bool   `yaml:"start_tls"                  json:"start_tls"`
+	AllowPlaintext    bool   `yaml:"allow_plaintext"            json:"allow_plaintext"`
+	TLSServerName     string `yaml:"tls_server_name"           json:"tls_server_name"`
+	TLSCAPEM          string `yaml:"tls_ca_pem"                json:"tls_ca_pem"`
 }
 
 // PromptTemplateI18n holds localized name and description for a prompt template.
@@ -657,8 +661,8 @@ func ValidateConfig(cfg *Config) error {
 	if cfg.LDAPAuth != nil && cfg.LDAPAuth.Enable {
 		ldapURL, parseErr := url.Parse(strings.TrimSpace(cfg.LDAPAuth.URL))
 		if parseErr != nil || ldapURL.Hostname() == "" || ldapURL.User != nil || ldapURL.Path != "" || ldapURL.RawQuery != "" ||
-			(ldapURL.Scheme != "ldaps" && !(ldapURL.Scheme == "ldap" && cfg.LDAPAuth.StartTLS)) {
-			errs = append(errs, "ldap_auth.url must use ldaps:// or ldap:// with start_tls=true")
+			(ldapURL.Scheme != "ldaps" && !(ldapURL.Scheme == "ldap" && (cfg.LDAPAuth.StartTLS || cfg.LDAPAuth.AllowPlaintext))) {
+			errs = append(errs, "LDAP 地址必须使用 ldaps://、启用 StartTLS，或勾选允许明文 LDAP")
 		}
 		if strings.TrimSpace(cfg.LDAPAuth.BaseDN) == "" {
 			errs = append(errs, "ldap_auth.base_dn is required when LDAP is enabled")
@@ -668,6 +672,13 @@ func ValidateConfig(cfg *Config) error {
 		}
 		if !strings.Contains(cfg.LDAPAuth.UserFilter, "{username}") {
 			errs = append(errs, "ldap_auth.user_filter must contain {username}")
+		}
+	}
+	if cfg.LDAPAuth != nil && cfg.LDAPAuth.TLSCAPEM != "" {
+		if len(cfg.LDAPAuth.TLSCAPEM) > 128*1024 {
+			errs = append(errs, "ldap_auth.tls_ca_pem exceeds 128 KiB")
+		} else if !x509.NewCertPool().AppendCertsFromPEM([]byte(cfg.LDAPAuth.TLSCAPEM)) {
+			errs = append(errs, "ldap_auth.tls_ca_pem must contain a PEM certificate")
 		}
 	}
 
@@ -813,11 +824,16 @@ func applyLDAPEnvOverrides(cfg *Config) {
 	set("LDAP_AUTH_USER_FILTER", &cfg.LDAPAuth.UserFilter)
 	set("LDAP_AUTH_USERNAME_ATTRIBUTE", &cfg.LDAPAuth.UsernameAttribute)
 	set("LDAP_AUTH_EMAIL_ATTRIBUTE", &cfg.LDAPAuth.EmailAttribute)
+	set("LDAP_AUTH_TLS_SERVER_NAME", &cfg.LDAPAuth.TLSServerName)
+	set("LDAP_AUTH_TLS_CA_PEM", &cfg.LDAPAuth.TLSCAPEM)
 	if value := strings.TrimSpace(os.Getenv("LDAP_AUTH_AUTO_PROVISION")); value != "" {
 		cfg.LDAPAuth.AutoProvision = strings.EqualFold(value, "true")
 	}
 	if value := strings.TrimSpace(os.Getenv("LDAP_AUTH_STARTTLS")); value != "" {
 		cfg.LDAPAuth.StartTLS = strings.EqualFold(value, "true")
+	}
+	if value := strings.TrimSpace(os.Getenv("LDAP_AUTH_ALLOW_PLAINTEXT")); value != "" {
+		cfg.LDAPAuth.AllowPlaintext = strings.EqualFold(value, "true")
 	}
 	if cfg.LDAPAuth.UserFilter == "" {
 		cfg.LDAPAuth.UserFilter = "(&(objectClass=person)(|(mail={username})(uid={username})(sAMAccountName={username})))"
