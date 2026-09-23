@@ -368,7 +368,7 @@ export default {
   },
   userProfile: {
     title: '用户信息',
-    description: '查看您的账户基础信息（用户 ID、用户名、邮箱、注册时间），并可修改登录密码',
+    description: '查看您的账户基础信息（用户 ID、用户名、邮箱、注册时间），并可修改登录密码或绑定 LDAP 账号',
     changePassword: {
       label: '修改密码',
       description: '使用当前密码验证后设置新密码。修改成功后所有设备上的登录状态将失效，需要重新登录。',
@@ -386,6 +386,15 @@ export default {
       sameAsCurrent: '新密码不能与当前密码相同',
       oidcOnlyDescription: '您的账号通过 OIDC 登录开通，尚未设置本地登录密码。',
       oidcOnlyNotice: '请联系系统管理员重置密码，或继续使用 OIDC 登录。自助修改密码需要先知道当前密码。',
+    },
+    ldapLink: {
+      label: '绑定 LDAP 账号', description: '验证本地账号和 LDAP 账号后，将目录身份绑定到当前账户。', action: '绑定账号', title: '绑定 LDAP 账号',
+      hint: '请输入当前本地密码和 LDAP 账号密码。密码仅用于本次验证，不会显示或保存到浏览器。',
+      localPasswordLabel: '当前本地密码', localPasswordPlaceholder: '输入当前本地密码', localPasswordRequired: '请输入当前本地密码',
+      usernameLabel: 'LDAP 用户名', usernamePlaceholder: '输入域账号或用户名', usernameRequired: '请输入 LDAP 用户名',
+      ldapPasswordLabel: 'LDAP 密码', ldapPasswordPlaceholder: '输入 LDAP 密码', ldapPasswordRequired: '请输入 LDAP 密码',
+      submit: '确认绑定', success: 'LDAP 账号已绑定', failed: '绑定 LDAP 账号失败，请稍后重试',
+      invalidCredentials: '本地密码或 LDAP 密码不正确', conflict: '该 LDAP 账号已绑定到其他账户，或邮箱与当前账户不一致', unavailable: 'LDAP 服务暂时不可用，请稍后重试',
     },
   },
   credential: {
@@ -5088,6 +5097,7 @@ export default {
     login: '登录',
     localLogin: '使用本地账号登录', ldapLogin: '使用 LDAP 账号登录', ldapUsername: 'LDAP 用户名',
     ldapUsernamePlaceholder: '输入域账号或用户名', ldapUsernameRequired: '请输入 LDAP 用户名', ldapLoginError: 'LDAP 登录失败，请检查用户名或密码',
+    ldapEmailConflict: '该 LDAP 邮箱已被本地账号使用。请先使用本地账号登录，再到“用户信息”绑定 LDAP 账号。',
     logout: '退出',
     oidcLogin: '使用 OIDC 登录',
     oidcLoginWithProvider: '使用 {provider} 登录',

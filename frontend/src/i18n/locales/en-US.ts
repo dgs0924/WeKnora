@@ -2448,6 +2448,7 @@ export default {
     localLogin: 'Use local account', ldapLogin: 'Sign in with LDAP', ldapUsername: 'LDAP username',
     ldapUsernamePlaceholder: 'Enter your domain account or username', ldapUsernameRequired: 'Enter LDAP username',
     ldapLoginError: 'LDAP sign-in failed. Check your username or password.',
+    ldapEmailConflict: 'This LDAP email is already used by a local account. Sign in with that local account, then link LDAP from User Profile.',
     logout: 'Logout',
     oidcLogin: 'Sign in with OIDC',
     oidcLoginWithProvider: 'Sign in with {provider}',
@@ -7206,7 +7207,7 @@ export default {
   },
   userProfile: {
     title: 'User Profile',
-    description: 'View your account info (user ID, username, email, registration time) and change your password.',
+    description: 'View your account info (user ID, username, email, registration time), change your password, or link an LDAP account.',
     changePassword: {
       label: 'Change password',
       description: 'Verify your current password, then set a new one. All signed-in sessions will be revoked and you will need to sign in again.',
@@ -7224,6 +7225,15 @@ export default {
       sameAsCurrent: 'New password must differ from your current password',
       oidcOnlyDescription: 'Your account was created via OIDC sign-in and has no known local password yet.',
       oidcOnlyNotice: 'Ask a system administrator to reset your password, or keep signing in with OIDC. Self-service change requires your current password.',
+    },
+    ldapLink: {
+      label: 'Link LDAP account', description: 'Verify your local and LDAP accounts to link the directory identity to this account.', action: 'Link account', title: 'Link LDAP account',
+      hint: 'Enter your current local password and LDAP password. Passwords are used only for this verification and are not displayed or stored in your browser.',
+      localPasswordLabel: 'Current local password', localPasswordPlaceholder: 'Enter your current local password', localPasswordRequired: 'Enter your current local password',
+      usernameLabel: 'LDAP username', usernamePlaceholder: 'Enter your domain account or username', usernameRequired: 'Enter your LDAP username',
+      ldapPasswordLabel: 'LDAP password', ldapPasswordPlaceholder: 'Enter your LDAP password', ldapPasswordRequired: 'Enter your LDAP password',
+      submit: 'Link account', success: 'LDAP account linked', failed: 'Unable to link the LDAP account. Please try again.',
+      invalidCredentials: 'Your local password or LDAP password is incorrect.', conflict: 'This LDAP account is linked to another user, or its email does not match this account.', unavailable: 'The LDAP service is temporarily unavailable. Please try again later.',
     },
   },
   tenantMember: {

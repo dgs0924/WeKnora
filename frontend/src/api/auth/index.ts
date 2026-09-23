@@ -15,9 +15,18 @@ export interface LDAPLoginRequest {
   password: string
 }
 
+/** Credentials required to attach an LDAP identity to the signed-in account. */
+export interface LDAPLinkRequest {
+  local_password: string
+  username: string
+  password: string
+}
+
 export interface LoginResponse {
   success: boolean
   message?: string
+  /** The LDAP directory email belongs to a different local account. */
+  ldap_email_conflict?: boolean
   user?: {
     id: string
     username: string
@@ -235,6 +244,9 @@ export async function loginWithLDAP(data: LDAPLoginRequest): Promise<LoginRespon
     return {
       success: false,
       message: error.message || t('error.auth.loginFailed'),
+      ldap_email_conflict:
+        error?.$httpStatus === 409
+        && error?.message === 'LDAP account conflicts with an existing user',
     }
   }
 }
@@ -485,6 +497,34 @@ export async function changePassword(
     return {
       success: false,
       message: resolveChangePasswordError(error),
+    }
+  }
+}
+
+/**
+ * Attach a verified LDAP account to the current JWT user. The request body is
+ * intentionally passed straight to the transport and is never logged here.
+ */
+export async function linkLDAPAccount(
+  data: LDAPLinkRequest,
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const response = await post('/api/v1/auth/ldap/link', data)
+    return response as unknown as { success: boolean; message?: string }
+  } catch (error: any) {
+    const status = error?.$httpStatus ?? error?.status
+    if (status === 400) {
+      return { success: false, message: t('userProfile.ldapLink.invalidCredentials') }
+    }
+    if (status === 409) {
+      return { success: false, message: t('userProfile.ldapLink.conflict') }
+    }
+    if (status === 503) {
+      return { success: false, message: t('userProfile.ldapLink.unavailable') }
+    }
+    return {
+      success: false,
+      message: error?.message || t('userProfile.ldapLink.failed'),
     }
   }
 }

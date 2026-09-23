@@ -66,6 +66,77 @@
         </div>
       </div>
 
+      <!-- LDAP 绑定：仅目录登录启用时显示，需同时验证本地和目录密码。 -->
+      <div v-if="ldapEnabled" class="setting-row">
+        <div class="setting-info">
+          <label>{{ $t('userProfile.ldapLink.label') }}</label>
+          <p class="desc">{{ $t('userProfile.ldapLink.description') }}</p>
+        </div>
+        <div class="setting-control">
+          <t-popup
+            v-model="ldapLinkPopupVisible"
+            trigger="click"
+            placement="bottom-end"
+            destroy-on-close
+            overlay-class-name="wk-popover user-profile-password-popup-overlay"
+          >
+            <t-button theme="primary" variant="outline" size="small">
+              {{ $t('userProfile.ldapLink.action') }}
+            </t-button>
+            <template #content>
+              <div class="password-popup-inner" @click.stop>
+                <div class="password-popup-title">{{ $t('userProfile.ldapLink.title') }}</div>
+                <p class="password-popup-hint">{{ $t('userProfile.ldapLink.hint') }}</p>
+                <t-form
+                  ref="ldapLinkFormRef"
+                  :data="ldapLinkForm"
+                  :rules="ldapLinkRules"
+                  label-align="top"
+                  class="password-popup-form"
+                  @submit.prevent
+                >
+                  <t-form-item :label="$t('userProfile.ldapLink.localPasswordLabel')" name="localPassword">
+                    <t-input
+                      v-model="ldapLinkForm.localPassword"
+                      type="password"
+                      autocomplete="current-password"
+                      :disabled="ldapLinkSubmitting"
+                      :placeholder="$t('userProfile.ldapLink.localPasswordPlaceholder')"
+                    />
+                  </t-form-item>
+                  <t-form-item :label="$t('userProfile.ldapLink.usernameLabel')" name="username">
+                    <t-input
+                      v-model="ldapLinkForm.username"
+                      autocomplete="username"
+                      :disabled="ldapLinkSubmitting"
+                      :placeholder="$t('userProfile.ldapLink.usernamePlaceholder')"
+                    />
+                  </t-form-item>
+                  <t-form-item :label="$t('userProfile.ldapLink.ldapPasswordLabel')" name="password">
+                    <t-input
+                      v-model="ldapLinkForm.password"
+                      type="password"
+                      autocomplete="off"
+                      :disabled="ldapLinkSubmitting"
+                      :placeholder="$t('userProfile.ldapLink.ldapPasswordPlaceholder')"
+                      @enter="submitLDAPLink"
+                    />
+                  </t-form-item>
+                </t-form>
+                <div class="password-popup-footer">
+                  <t-button variant="outline" :disabled="ldapLinkSubmitting" @click="closeLDAPLinkPopup">
+                    {{ $t('common.cancel') }}
+                  </t-button>
+                  <t-button theme="primary" :loading="ldapLinkSubmitting" @click="submitLDAPLink">
+                    {{ $t('userProfile.ldapLink.submit') }}
+                  </t-button>
+                </div>
+              </div>
+            </template>
+          </t-popup>
+        </div>
+      </div>
+
       <!-- 修改密码：与其它 setting-row 同款只读行 + 编辑入口，表单进原地 popup -->
       <div class="setting-row">
         <div class="setting-info">
@@ -178,6 +249,7 @@ import {
   getCurrentUser,
   getAuthConfig,
   changePassword,
+  linkLDAPAccount,
   logout as logoutApi,
   type UserInfo,
 } from '@/api/auth'
@@ -191,6 +263,7 @@ const authStore = useAuthStore()
 
 const userInfo = ref<UserInfo | null>(null)
 const complexPasswordEnabled = ref(false)
+const ldapEnabled = ref(false)
 const loading = ref(true)
 const error = ref('')
 
@@ -203,12 +276,30 @@ const passwordForm = reactive({
   confirmPassword: '',
 })
 
+const ldapLinkPopupVisible = ref(false)
+const ldapLinkFormRef = ref<FormInstanceFunctions | null>(null)
+const ldapLinkSubmitting = ref(false)
+const ldapLinkForm = reactive({
+  localPassword: '',
+  username: '',
+  password: '',
+})
+
 const loadPasswordPolicy = async () => {
   try {
     const resp = await getAuthConfig()
     complexPasswordEnabled.value = !!resp.complex_password_enabled
   } catch {
     complexPasswordEnabled.value = false
+  }
+}
+
+const loadLDAPAvailability = async () => {
+  try {
+    const resp = await getAuthConfig()
+    ldapEnabled.value = resp.ldap_enabled === true
+  } catch {
+    ldapEnabled.value = false
   }
 }
 
@@ -223,6 +314,10 @@ watch(passwordPopupVisible, (open) => {
   }
   resetPasswordForm()
   void loadPasswordPolicy()
+})
+
+watch(ldapLinkPopupVisible, (open) => {
+  if (!open) resetLDAPLinkForm()
 })
 
 const passwordRules = computed<Record<string, FormRule[]>>(() => ({
@@ -244,6 +339,18 @@ const passwordRules = computed<Record<string, FormRule[]>>(() => ({
       type: 'error',
       trigger: 'blur',
     },
+  ],
+}))
+
+const ldapLinkRules = computed<Record<string, FormRule[]>>(() => ({
+  localPassword: [
+    { required: true, message: t('userProfile.ldapLink.localPasswordRequired'), type: 'error' },
+  ],
+  username: [
+    { required: true, message: t('userProfile.ldapLink.usernameRequired'), type: 'error' },
+  ],
+  password: [
+    { required: true, message: t('userProfile.ldapLink.ldapPasswordRequired'), type: 'error' },
   ],
 }))
 
@@ -294,6 +401,43 @@ const closePasswordPopup = () => {
   resetPasswordForm()
 }
 
+const resetLDAPLinkForm = () => {
+  ldapLinkForm.localPassword = ''
+  ldapLinkForm.username = ''
+  ldapLinkForm.password = ''
+  ldapLinkFormRef.value?.clearValidate?.()
+}
+
+const closeLDAPLinkPopup = () => {
+  if (ldapLinkSubmitting.value) return
+  ldapLinkPopupVisible.value = false
+  resetLDAPLinkForm()
+}
+
+const submitLDAPLink = async () => {
+  if (ldapLinkSubmitting.value) return
+  const result = await ldapLinkFormRef.value?.validate?.()
+  if (result !== true) return
+
+  ldapLinkSubmitting.value = true
+  try {
+    const resp = await linkLDAPAccount({
+      local_password: ldapLinkForm.localPassword,
+      username: ldapLinkForm.username,
+      password: ldapLinkForm.password,
+    })
+    if (!resp.success) {
+      MessagePlugin.error(resp.message || t('userProfile.ldapLink.failed'))
+      return
+    }
+    ldapLinkPopupVisible.value = false
+    resetLDAPLinkForm()
+    MessagePlugin.success(t('userProfile.ldapLink.success'))
+  } finally {
+    ldapLinkSubmitting.value = false
+  }
+}
+
 const submitPasswordChange = async () => {
   if (passwordSubmitting.value) return
   const result = await passwordFormRef.value?.validate?.()
@@ -330,7 +474,10 @@ const submitPasswordChange = async () => {
   }
 }
 
-onMounted(loadInfo)
+onMounted(() => {
+  void loadInfo()
+  void loadLDAPAvailability()
+})
 </script>
 
 <style lang="less" scoped>

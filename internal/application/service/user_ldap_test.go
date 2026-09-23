@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/Tencent/WeKnora/internal/auth"
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/types"
@@ -16,6 +18,8 @@ type ldapLoginRepo struct {
 	subjectUser *types.User
 	emailUser   *types.User
 	created     *types.User
+	byID        *types.User
+	updated     *types.User
 }
 
 func (r *ldapLoginRepo) GetUserByLDAPSubject(context.Context, string) (*types.User, error) {
@@ -32,6 +36,15 @@ func (r *ldapLoginRepo) GetUserByUsername(context.Context, string) (*types.User,
 
 func (r *ldapLoginRepo) CreateUser(_ context.Context, user *types.User) error {
 	r.created = user
+	return nil
+}
+
+func (r *ldapLoginRepo) GetUserByID(context.Context, string) (*types.User, error) {
+	return r.byID, nil
+}
+
+func (r *ldapLoginRepo) UpdateUser(_ context.Context, user *types.User) error {
+	r.updated = user
 	return nil
 }
 
@@ -103,5 +116,50 @@ func TestLDAPFirstLoginCreatesBoundAccountAndIssuesTokens(t *testing.T) {
 	}
 	if repo.created.TenantID != 0 || repo.created.PasswordHash == "valid-password" {
 		t.Fatalf("LDAP account tenant or password state is wrong: %+v", repo.created)
+	}
+}
+
+func TestLDAPLinkRequiresBothPasswordsAndMatchingIdentity(t *testing.T) {
+	hash, err := bcrypt.GenerateFromPassword([]byte("local-pass"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &ldapLoginRepo{byID: &types.User{ID: "local-user", Email: "alice@example.com", PasswordHash: string(hash), IsActive: true}}
+	svc := newLDAPLoginService(repo, true)
+	if err := svc.LinkLDAPAccount(context.Background(), "local-user", "wrong", "alice", "directory-pass"); !errors.Is(err, ErrLDAPLinkCredentials) {
+		t.Fatalf("wrong local password must not link LDAP account: %v", err)
+	}
+	if repo.updated != nil {
+		t.Fatal("account was modified despite wrong local password")
+	}
+	svc.ldapAuthenticator = func(_, _ string, _ *config.LDAPAuthConfig) (*auth.LDAPIdentity, error) {
+		return nil, auth.ErrInvalidLDAPCredentials
+	}
+	if err := svc.LinkLDAPAccount(context.Background(), "local-user", "local-pass", "alice", "wrong"); !errors.Is(err, ErrLDAPLinkCredentials) {
+		t.Fatalf("wrong LDAP password must not link account: %v", err)
+	}
+	svc.ldapAuthenticator = func(_, _ string, _ *config.LDAPAuthConfig) (*auth.LDAPIdentity, error) {
+		return &auth.LDAPIdentity{Subject: "uid=alice,dc=example,dc=com", Email: "other@example.com"}, nil
+	}
+	if err := svc.LinkLDAPAccount(context.Background(), "local-user", "local-pass", "alice", "directory-pass"); !errors.Is(err, ErrLDAPLinkConflict) {
+		t.Fatalf("mismatched LDAP email must not link account: %v", err)
+	}
+	if repo.updated != nil {
+		t.Fatal("account was modified despite mismatched directory identity")
+	}
+}
+
+func TestLDAPLinkBindsVerifiedSubject(t *testing.T) {
+	hash, err := bcrypt.GenerateFromPassword([]byte("local-pass"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &ldapLoginRepo{byID: &types.User{ID: "local-user", Email: "alice@example.com", PasswordHash: string(hash), IsActive: true}}
+	svc := newLDAPLoginService(repo, true)
+	if err := svc.LinkLDAPAccount(context.Background(), "local-user", "local-pass", "alice", "directory-pass"); err != nil {
+		t.Fatalf("verified LDAP account should link: %v", err)
+	}
+	if repo.updated == nil || repo.updated.LDAPSubject == nil || *repo.updated.LDAPSubject != "uid=alice,ou=people,dc=example,dc=com" {
+		t.Fatalf("LDAP subject was not persisted: %+v", repo.updated)
 	}
 }

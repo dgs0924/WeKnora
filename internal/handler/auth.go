@@ -329,10 +329,54 @@ func (h *AuthHandler) LDAPLogin(c *gin.Context) {
 		return
 	}
 	if !response.Success {
+		if response.Message == service.LDAPAccountConflictMessage {
+			c.JSON(http.StatusConflict, dto.NewAuthLoginResponse(response))
+			return
+		}
 		c.JSON(http.StatusUnauthorized, dto.NewAuthLoginResponse(response))
 		return
 	}
 	c.JSON(http.StatusOK, dto.NewAuthLoginResponse(response))
+}
+
+type ldapLinkRequest struct {
+	LocalPassword string `json:"local_password" binding:"required"`
+	Username      string `json:"username" binding:"required"`
+	Password      string `json:"password" binding:"required"`
+}
+
+// LinkLDAPAccount binds an LDAP identity only after both passwords are
+// verified. This route requires a normal authenticated user session.
+func (h *AuthHandler) LinkLDAPAccount(c *gin.Context) {
+	var req ldapLinkRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "本地密码、LDAP 用户名和 LDAP 密码均不能为空"})
+		return
+	}
+	user, err := h.userService.GetCurrentUser(c.Request.Context())
+	if err != nil || user == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先使用本地账号登录"})
+		return
+	}
+	linker, ok := h.userService.(interface {
+		LinkLDAPAccount(context.Context, string, string, string, string) error
+	})
+	if !ok {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "LDAP 绑定服务不可用"})
+		return
+	}
+	err = linker.LinkLDAPAccount(c.Request.Context(), user.ID, req.LocalPassword, req.Username, req.Password)
+	switch {
+	case err == nil:
+		c.JSON(http.StatusOK, gin.H{"success": true})
+	case stderrors.Is(err, service.ErrLDAPLinkCredentials):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "本地密码或 LDAP 账号密码不正确"})
+	case stderrors.Is(err, service.ErrLDAPLinkConflict):
+		c.JSON(http.StatusConflict, gin.H{"error": "LDAP 邮箱与当前账号不一致，或已绑定其他账号"})
+	default:
+		logger.Errorf(c.Request.Context(), "LDAP account link failed: %v", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "LDAP 绑定暂时不可用"})
+	}
 }
 
 // GetOIDCAuthorizationURL godoc

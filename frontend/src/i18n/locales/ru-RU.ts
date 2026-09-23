@@ -367,6 +367,10 @@ export default {
   },
   userProfile: {
     title: 'Информация о пользователе',
+    ldapLink: {
+      label: 'Привязать учётную запись LDAP', description: 'Подтвердите локальную учётную запись и LDAP, чтобы привязать идентификатор каталога к этому аккаунту.', action: 'Привязать аккаунт', title: 'Привязать учётную запись LDAP', hint: 'Введите текущий локальный пароль и пароль LDAP. Пароли используются только для этой проверки и не сохраняются в браузере.',
+      localPasswordLabel: 'Текущий локальный пароль', localPasswordPlaceholder: 'Введите текущий локальный пароль', localPasswordRequired: 'Введите текущий локальный пароль', usernameLabel: 'Имя пользователя LDAP', usernamePlaceholder: 'Введите доменную учётную запись или имя пользователя', usernameRequired: 'Введите имя пользователя LDAP', ldapPasswordLabel: 'Пароль LDAP', ldapPasswordPlaceholder: 'Введите пароль LDAP', ldapPasswordRequired: 'Введите пароль LDAP', submit: 'Привязать', success: 'Учётная запись LDAP привязана', failed: 'Не удалось привязать учётную запись LDAP. Повторите попытку.', invalidCredentials: 'Локальный пароль или пароль LDAP неверен.', conflict: 'Эта учётная запись LDAP уже привязана к другому пользователю или её email не совпадает с текущим аккаунтом.', unavailable: 'Служба LDAP временно недоступна. Повторите попытку позже.',
+    },
     description: 'Просмотр базовых данных аккаунта (ID пользователя, имя, email, дата регистрации) и смена пароля.',
     changePassword: {
       label: 'Сменить пароль',
@@ -5083,6 +5087,7 @@ export default {
   },
   auth: {
     login: 'Вход',
+    ldapEmailConflict: 'Этот email LDAP уже используется локальной учётной записью. Войдите через локальную учётную запись и привяжите LDAP в профиле пользователя.',
     localLogin: 'Использовать локальную учётную запись', ldapLogin: 'Войти через LDAP', ldapUsername: 'Имя пользователя LDAP',
     ldapUsernamePlaceholder: 'Введите доменную учётную запись или имя пользователя', ldapUsernameRequired: 'Введите имя пользователя LDAP', ldapLoginError: 'Не удалось войти через LDAP. Проверьте имя пользователя и пароль.',
     logout: 'Выход',

@@ -726,7 +726,11 @@ const handleLogin = async () => {
       await persistLoginResponse(response)
       notifyLoginSuccess(response, t, tm, formatRole, roleIcon)
     } else {
-      MessagePlugin.error(response.message || (ldapLoginMode.value ? t('auth.ldapLoginError') : t('auth.loginError')))
+      MessagePlugin.error(
+        response.ldap_email_conflict
+          ? t('auth.ldapEmailConflict')
+          : (response.message || (ldapLoginMode.value ? t('auth.ldapLoginError') : t('auth.loginError'))),
+      )
     }
   } catch (error: any) {
     console.error('登录错误:', error)

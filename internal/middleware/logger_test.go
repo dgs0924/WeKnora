@@ -63,6 +63,11 @@ func TestSanitizeBody(t *testing.T) {
 			want: `{"bind_password":"***","url":"ldaps://example.com"}`,
 		},
 		{
+			name: "LDAP account link local password",
+			in:   `{"local_password":"local-secret","password":"ldap-secret"}`,
+			want: `{"local_password":"***","password":"***"}`,
+		},
+		{
 			name: "extra whitespace around colon",
 			in:   `{"apiKey"  :   "leak"}`,
 			want: `{"apiKey":"***"}`,
