@@ -1,4 +1,19 @@
 export default {
+  ldapSettings: {
+    navLabel: 'LDAP ログイン', title: 'LDAP / Active Directory', description: '企業ディレクトリのログインを設定します。変更は直ちに反映され、システム管理者のみが利用できます。',
+    loading: 'LDAP 設定を読み込み中...', loadFailed: 'LDAP 設定の読み込みに失敗しました', statusEnabled: '有効', statusDisabled: '無効',
+    securityHint: 'ディレクトリのパスワードは今回のログインだけに使用され、WeKnora には保存されません。Bind パスワードは再表示されません。',
+    enabled: 'LDAP ログインを有効にする', enabledDescription: 'ログイン画面に LDAP / Active Directory のログインを表示します。',
+    autoProvision: '初回ログイン時にユーザーを作成', autoProvisionDescription: 'ディレクトリのユーザーが初めてログインしたときに WeKnora アカウントを作成します。',
+    connectionTitle: '接続', url: 'LDAP URL', urlPlaceholder: 'ldaps://ldap.example.com:636', startTLS: 'StartTLS を使用', startTLSDescription: 'ldap:// URL のみで必要です。ldaps:// はすでに TLS を使用します。',
+    searchAccountTitle: 'ディレクトリ検索アカウント', bindDN: 'Bind DN', bindDNPlaceholder: 'cn=weknora,ou=service,dc=example,dc=com',
+    bindPassword: 'Bind パスワード', bindPasswordPlaceholder: 'ディレクトリ検索アカウントのパスワードを入力', bindPasswordRetained: '保存済み。空欄のままにすると維持されます', bindPasswordHint: '空欄にしても保存済みのパスワードは削除されません。',
+    userLookupTitle: 'ユーザー検索', baseDN: 'ユーザー Base DN', baseDNPlaceholder: 'ou=users,dc=example,dc=com',
+    userFilter: 'ユーザーフィルター', userFilterPlaceholder: '(&(objectClass=person)(uid={username}))', userFilterHint: '{username} を含める必要があります。ログイン名は検索前に安全にエスケープされます。',
+    usernameAttribute: 'ユーザー名属性', usernameAttributePlaceholder: 'uid または sAMAccountName', emailAttribute: 'メール属性', emailAttributePlaceholder: 'mail',
+    save: '設定を保存', saving: '保存中...', saveSuccess: 'LDAP 設定を保存しました', saveFailed: 'LDAP 設定の保存に失敗しました',
+    reset: '環境設定を復元', resetConfirm: 'データベースの LDAP 上書きを削除し、環境設定を復元します。続行しますか？', resetSuccess: '環境設定を復元しました', resetFailed: 'LDAP 設定の復元に失敗しました',
+  },
   localBrowser: {
     pipOpen: "プレビューを別ウィンドウで表示",
     pipReturn: "会話内のプレビューに戻す",
@@ -2420,6 +2435,8 @@ export default {
   },
   auth: {
     login: 'ログイン',
+    localLogin: 'ローカルアカウントを使用', ldapLogin: 'LDAP でログイン', ldapUsername: 'LDAP ユーザー名',
+    ldapUsernamePlaceholder: 'ドメインアカウントまたはユーザー名を入力', ldapUsernameRequired: 'LDAP ユーザー名を入力してください', ldapLoginError: 'LDAP ログインに失敗しました。ユーザー名またはパスワードを確認してください。',
     logout: 'ログアウト',
     oidcLogin: 'OIDCでログイン',
     oidcLoginWithProvider: '{provider}でログイン',

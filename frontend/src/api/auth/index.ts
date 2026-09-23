@@ -9,6 +9,12 @@ export interface LoginRequest {
   password: string
 }
 
+/** LDAP / Active Directory credentials. LDAP usernames need not be emails. */
+export interface LDAPLoginRequest {
+  username: string
+  password: string
+}
+
 export interface LoginResponse {
   success: boolean
   message?: string
@@ -220,6 +226,19 @@ export async function login(data: LoginRequest): Promise<LoginResponse> {
   }
 }
 
+/** Authenticate against the administrator-configured LDAP directory. */
+export async function loginWithLDAP(data: LDAPLoginRequest): Promise<LoginResponse> {
+  try {
+    const response = await post('/api/v1/auth/ldap/login', data)
+    return response as unknown as LoginResponse
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.message || t('error.auth.loginFailed'),
+    }
+  }
+}
+
 /**
  * 获取 OIDC 登录跳转地址
  */
@@ -264,6 +283,8 @@ export interface AuthConfigResponse {
   success: boolean
   registration_mode: 'self_serve' | 'invite_only' | string
   complex_password_enabled: boolean
+  /** Whether the login page should offer the LDAP / AD sign-in form. */
+  ldap_enabled?: boolean
 }
 
 export async function getAuthConfig(): Promise<AuthConfigResponse> {
@@ -271,7 +292,7 @@ export async function getAuthConfig(): Promise<AuthConfigResponse> {
     const response = await get('/api/v1/auth/config')
     return response as unknown as AuthConfigResponse
   } catch {
-    return { success: false, registration_mode: 'self_serve', complex_password_enabled: false }
+    return { success: false, registration_mode: 'self_serve', complex_password_enabled: false, ldap_enabled: false }
   }
 }
 

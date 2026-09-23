@@ -195,15 +195,20 @@
           <div class="form-header">
             <h2 class="form-title">{{ $t('auth.login') }}</h2>
             <p class="form-welcome">{{ $t('auth.subtitle') }}</p>
-            <p v-if="registrationEnabled" class="form-hint">{{ $t('auth.loginHint') }}</p>
+            <p v-if="registrationEnabled && !ldapLoginMode" class="form-hint">{{ $t('auth.loginHint') }}</p>
           </div>
 
           <div class="form-content">
             <t-form ref="formRef" :data="formData" :rules="formRules" @submit="handleLogin" layout="vertical"
               label-align="top">
-              <t-form-item :label="$t('auth.email')" name="email">
+              <t-form-item v-if="!ldapLoginMode" :label="$t('auth.email')" name="email">
                 <t-input v-model="formData.email" :placeholder="$t('auth.emailPlaceholder')" type="text"
                   autocomplete="email" size="large" :disabled="loading" />
+              </t-form-item>
+
+              <t-form-item v-else :label="$t('auth.ldapUsername')" name="username">
+                <t-input v-model="formData.username" :placeholder="$t('auth.ldapUsernamePlaceholder')" type="text"
+                  autocomplete="username" size="large" :disabled="loading" />
               </t-form-item>
 
               <t-form-item :label="$t('auth.password')" name="password">
@@ -212,10 +217,20 @@
               </t-form-item>
 
               <t-button type="submit" theme="primary" size="large" block :loading="loading" class="submit-button">
-                {{ loading ? $t('auth.loggingIn') : $t('auth.login') }}
+                {{ loading ? $t('auth.loggingIn') : (ldapLoginMode ? $t('auth.ldapLogin') : $t('auth.login')) }}
               </t-button>
 
-              <div class="register-cta" v-if="registrationEnabled">
+              <div v-if="ldapEnabled" class="ldap-login-switch">
+                <div class="oidc-divider">
+                  <span>{{ $t('auth.orContinueWith') }}</span>
+                </div>
+                <t-button theme="default" variant="outline" size="large" block :disabled="loading || oidcLoading"
+                  @click="toggleLDAPLoginMode">
+                  {{ ldapLoginMode ? $t('auth.localLogin') : $t('auth.ldapLogin') }}
+                </t-button>
+              </div>
+
+              <div class="register-cta" v-if="registrationEnabled && !ldapLoginMode">
                 <div class="register-cta__divider">
                   <span>{{ $t('auth.firstTime') }}</span>
                 </div>
@@ -225,7 +240,7 @@
                 </t-button>
               </div>
 
-              <div v-if="oidcEnabled" class="oidc-divider">
+              <div v-if="oidcEnabled && !ldapEnabled" class="oidc-divider">
                 <span>{{ $t('auth.orContinueWith') }}</span>
               </div>
 
@@ -353,6 +368,7 @@ import 'swiper/css/effect-fade'
 import 'swiper/css/pagination'
 import {
   login,
+  loginWithLDAP,
   register,
   getOIDCAuthorizationURL,
   getOIDCConfig,
@@ -416,6 +432,8 @@ const isRegisterMode = ref(false)
 const showLanguageMenu = ref(false)
 const oidcEnabled = ref(false)
 const oidcProviderName = ref('')
+const ldapEnabled = ref(false)
+const ldapLoginMode = ref(false)
 // registrationEnabled defaults to true so that on first paint the Register
 // link is visible; the actual mode is fetched from /auth/config in onMounted.
 // In invite_only mode the link/card are hidden.
@@ -454,6 +472,7 @@ const currentLangOption = computed(() => languageOptions.find(l => l.value === c
 // Login form data
 const formData = reactive<{ [key: string]: any }>({
   email: '',
+  username: '',
   password: '',
 })
 
@@ -467,14 +486,20 @@ const registerData = reactive<{ [key: string]: any }>({
 
 // Login form validation rules
 const formRules = computed(() => ({
-  email: [
-    { required: true, message: t('auth.emailRequired'), type: 'error' },
-    { email: true, message: t('auth.emailInvalid'), type: 'error' }
-  ],
+  ...(ldapLoginMode.value
+    ? { username: [{ required: true, message: t('auth.ldapUsernameRequired'), type: 'error' }] }
+    : {
+      email: [
+        { required: true, message: t('auth.emailRequired'), type: 'error' },
+        { email: true, message: t('auth.emailInvalid'), type: 'error' }
+      ],
+    }),
   password: [
     { required: true, message: t('auth.passwordRequired'), type: 'error' },
-    { min: 8, message: t('auth.passwordMinLength'), type: 'error' },
-    { max: 32, message: t('auth.passwordMaxLength'), type: 'error' }
+    ...(!ldapLoginMode.value ? [
+      { min: 8, message: t('auth.passwordMinLength'), type: 'error' },
+      { max: 32, message: t('auth.passwordMaxLength'), type: 'error' },
+    ] : []),
   ],
 }))
 
@@ -512,6 +537,12 @@ const toggleMode = () => {
   Object.keys(registerData).forEach(key => {
     (registerData as any)[key] = ''
   })
+}
+
+const toggleLDAPLoginMode = () => {
+  ldapLoginMode.value = !ldapLoginMode.value
+  formData.password = ''
+  formRef.value?.clearValidate?.()
 }
 
 // Toggle language menu
@@ -620,9 +651,13 @@ const loadAuthConfig = async () => {
     const response = await getAuthConfig()
     registrationEnabled.value = response.registration_mode !== 'invite_only'
     complexPasswordEnabled.value = response.complex_password_enabled
+    ldapEnabled.value = response.ldap_enabled === true
+    if (!ldapEnabled.value) ldapLoginMode.value = false
   } catch {
     registrationEnabled.value = true
     complexPasswordEnabled.value = false
+    ldapEnabled.value = false
+    ldapLoginMode.value = false
   }
 }
 
@@ -677,10 +712,9 @@ const handleLogin = async () => {
 
     loading.value = true
 
-    const response = await login({
-      email: formData.email,
-      password: formData.password,
-    })
+    const response = ldapLoginMode.value
+      ? await loginWithLDAP({ username: formData.username, password: formData.password })
+      : await login({ email: formData.email, password: formData.password })
 
     if (response.success) {
       if (inviteToken.value) {
@@ -692,11 +726,11 @@ const handleLogin = async () => {
       await persistLoginResponse(response)
       notifyLoginSuccess(response, t, tm, formatRole, roleIcon)
     } else {
-      MessagePlugin.error(response.message || t('auth.loginError'))
+      MessagePlugin.error(response.message || (ldapLoginMode.value ? t('auth.ldapLoginError') : t('auth.loginError')))
     }
   } catch (error: any) {
     console.error('登录错误:', error)
-    MessagePlugin.error(error.message || t('auth.loginErrorRetry'))
+    MessagePlugin.error(error.message || (ldapLoginMode.value ? t('auth.ldapLoginError') : t('auth.loginErrorRetry')))
   } finally {
     loading.value = false
   }
@@ -804,6 +838,7 @@ onMounted(async () => {
     const cfg = await getAuthConfig()
     const inviteOnly = cfg.registration_mode === 'invite_only'
     registrationEnabled.value = !inviteOnly
+    ldapEnabled.value = cfg.ldap_enabled === true
     isRegisterMode.value = !inviteOnly
     loadOIDCConfig()
     return
@@ -1539,6 +1574,17 @@ onMounted(async () => {
   font-weight: 500;
   font-family: var(--app-font-family);
   margin: 20px 0 16px 0;
+}
+
+.ldap-login-switch {
+  margin-top: 4px;
+
+  :deep(.t-button) {
+    height: 46px;
+    border-radius: var(--app-radius-md);
+    font-size: var(--app-text-lg);
+    font-weight: 500;
+  }
 }
 
 .oidc-divider {

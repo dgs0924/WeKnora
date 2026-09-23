@@ -308,7 +308,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // LDAPLogin authenticates a directory account and returns the ordinary
 // WeKnora token and membership response.
 func (h *AuthHandler) LDAPLogin(c *gin.Context) {
-	if h.configInfo == nil || h.configInfo.LDAPAuth == nil || !h.configInfo.LDAPAuth.Enable {
+	ldapCfg, cfgErr := service.ResolveLDAPConfig(c.Request.Context(), h.configInfo, h.systemSettingSvc)
+	if cfgErr != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "LDAP configuration is unavailable"})
+		return
+	}
+	if !ldapCfg.Enable {
 		c.JSON(http.StatusNotFound, gin.H{"error": "LDAP login is not enabled"})
 		return
 	}
@@ -862,11 +867,13 @@ func (h *AuthHandler) GetAuthConfig(c *gin.Context) {
 		h.configInfo,
 		h.systemSettingSvc,
 	)
+	ldapCfg, ldapErr := service.ResolveLDAPConfig(c.Request.Context(), h.configInfo, h.systemSettingSvc)
+	ldapEnabled := ldapErr == nil && ldapCfg.Enable
 	c.JSON(http.StatusOK, gin.H{
 		"success":                  true,
 		"registration_mode":        mode,
 		"complex_password_enabled": complexPasswordEnabled,
-		"ldap_enabled":             h.configInfo != nil && h.configInfo.LDAPAuth != nil && h.configInfo.LDAPAuth.Enable,
+		"ldap_enabled":             ldapEnabled,
 	})
 }
 

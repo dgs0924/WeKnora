@@ -1,4 +1,22 @@
 export default {
+  ldapSettings: {
+    navLabel: 'LDAP sign-in', title: 'LDAP / Active Directory',
+    description: 'Configure enterprise directory sign-in. Changes take effect immediately and are available only to system administrators.',
+    loading: 'Loading LDAP configuration...', loadFailed: 'Failed to load LDAP configuration',
+    statusEnabled: 'Enabled', statusDisabled: 'Disabled',
+    securityHint: 'Directory passwords are used only for this sign-in and are never stored by WeKnora. Bind passwords are never shown again.',
+    enabled: 'Enable LDAP sign-in', enabledDescription: 'Show an LDAP / Active Directory sign-in option on the login page.',
+    autoProvision: 'Create users on first sign-in', autoProvisionDescription: 'Create a WeKnora account when a directory user signs in for the first time.',
+    connectionTitle: 'Connection', url: 'LDAP URL', urlPlaceholder: 'ldaps://ldap.example.com:636',
+    startTLS: 'Use StartTLS', startTLSDescription: 'Required only for ldap:// URLs; ldaps:// already uses TLS.',
+    searchAccountTitle: 'Directory search account', bindDN: 'Bind DN', bindDNPlaceholder: 'cn=weknora,ou=service,dc=example,dc=com',
+    bindPassword: 'Bind password', bindPasswordPlaceholder: 'Enter the directory search account password', bindPasswordRetained: 'Saved; leave empty to keep it', bindPasswordHint: 'Leaving this empty does not clear the saved password.',
+    userLookupTitle: 'User lookup', baseDN: 'User base DN', baseDNPlaceholder: 'ou=users,dc=example,dc=com',
+    userFilter: 'User filter', userFilterPlaceholder: '(&(objectClass=person)(uid={username}))', userFilterHint: 'Must contain {username}; the login name is safely escaped before searching.',
+    usernameAttribute: 'Username attribute', usernameAttributePlaceholder: 'uid or sAMAccountName', emailAttribute: 'Email attribute', emailAttributePlaceholder: 'mail',
+    save: 'Save configuration', saving: 'Saving...', saveSuccess: 'LDAP configuration saved', saveFailed: 'Failed to save LDAP configuration',
+    reset: 'Restore environment configuration', resetConfirm: 'This removes the database LDAP override and restores the environment configuration. Continue?', resetSuccess: 'Environment configuration restored', resetFailed: 'Failed to restore LDAP configuration',
+  },
   localBrowser: {
     pipOpen: "Pop out preview",
     pipReturn: "Return to conversation",
@@ -2420,6 +2438,9 @@ export default {
   },
   auth: {
     login: 'Login',
+    localLogin: 'Use local account', ldapLogin: 'Sign in with LDAP', ldapUsername: 'LDAP username',
+    ldapUsernamePlaceholder: 'Enter your domain account or username', ldapUsernameRequired: 'Enter LDAP username',
+    ldapLoginError: 'LDAP sign-in failed. Check your username or password.',
     logout: 'Logout',
     oidcLogin: 'Sign in with OIDC',
     oidcLoginWithProvider: 'Sign in with {provider}',

@@ -1,4 +1,20 @@
 export default {
+  ldapSettings: {
+    navLabel: 'LDAP 登录', title: 'LDAP / Active Directory', description: '配置企业目录登录。保存后立即生效，仅系统管理员可访问。',
+    loading: '正在加载 LDAP 配置...', loadFailed: '加载 LDAP 配置失败', statusEnabled: '已启用', statusDisabled: '未启用',
+    securityHint: '目录账号密码仅用于本次认证，不会保存到 WeKnora。Bind 密码不会回显。',
+    enabled: '启用 LDAP 登录', enabledDescription: '登录页将显示 LDAP / Active Directory 账号登录入口。',
+    autoProvision: '首次登录自动创建用户', autoProvisionDescription: '目录中存在、但 WeKnora 尚未有对应账号的用户可在首次登录时创建账号。',
+    connectionTitle: '连接', url: 'LDAP 地址', urlPlaceholder: 'ldaps://ldap.example.com:636',
+    startTLS: '使用 StartTLS', startTLSDescription: '仅 ldap:// 地址需要；ldaps:// 已使用 TLS。',
+    searchAccountTitle: '目录搜索账号', bindDN: 'Bind DN', bindDNPlaceholder: 'cn=weknora,ou=service,dc=example,dc=com',
+    bindPassword: 'Bind 密码', bindPasswordPlaceholder: '输入目录搜索账号密码', bindPasswordRetained: '已保存，留空则保持不变', bindPasswordHint: '留空不会清除已保存的密码。',
+    userLookupTitle: '用户查找', baseDN: '用户 Base DN', baseDNPlaceholder: 'ou=users,dc=example,dc=com',
+    userFilter: '用户过滤器', userFilterPlaceholder: '(&(objectClass=person)(uid={username}))', userFilterHint: '必须包含 {username}，登录名会在提交查询前安全转义。',
+    usernameAttribute: '用户名属性', usernameAttributePlaceholder: 'uid 或 sAMAccountName', emailAttribute: '邮箱属性', emailAttributePlaceholder: 'mail',
+    save: '保存配置', saving: '正在保存...', saveSuccess: 'LDAP 配置已保存', saveFailed: '保存 LDAP 配置失败',
+    reset: '恢复环境变量配置', resetConfirm: '将删除数据库中的 LDAP 覆盖配置，并恢复到环境变量配置。确定继续吗？', resetSuccess: '已恢复环境变量配置', resetFailed: '恢复 LDAP 配置失败',
+  },
   localBrowser: {
     pipOpen: "弹出悬浮窗",
     pipReturn: "返回对话小窗",
@@ -5063,6 +5079,8 @@ export default {
   },
   auth: {
     login: '登录',
+    localLogin: '使用本地账号登录', ldapLogin: '使用 LDAP 账号登录', ldapUsername: 'LDAP 用户名',
+    ldapUsernamePlaceholder: '输入域账号或用户名', ldapUsernameRequired: '请输入 LDAP 用户名', ldapLoginError: 'LDAP 登录失败，请检查用户名或密码',
     logout: '退出',
     oidcLogin: '使用 OIDC 登录',
     oidcLoginWithProvider: '使用 {provider} 登录',

@@ -2234,6 +2234,10 @@ func (h *SystemHandler) enrichSettingsModifiedBy(ctx context.Context, rows []*ty
 func (h *SystemHandler) GetSystemSetting(c *gin.Context) {
 	ctx := logger.CloneContext(c.Request.Context())
 	key := c.Param("key")
+	if key == service.LDAPConfigSettingKey {
+		c.JSON(http.StatusNotFound, gin.H{"error": "use the LDAP configuration endpoint"})
+		return
+	}
 	row, err := h.systemSettingSvc.Get(ctx, key)
 	if err != nil {
 		// Service-layer "unknown key" surfaces as a generic error here;
@@ -2278,6 +2282,10 @@ type UpdateSystemSettingRequest struct {
 func (h *SystemHandler) UpdateSystemSetting(c *gin.Context) {
 	ctx := logger.CloneContext(c.Request.Context())
 	key := c.Param("key")
+	if key == service.LDAPConfigSettingKey {
+		c.JSON(http.StatusNotFound, gin.H{"error": "use the LDAP configuration endpoint"})
+		return
+	}
 
 	var req UpdateSystemSettingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -2381,6 +2389,10 @@ func (h *SystemHandler) ApplyDefaultStorageQuotaToAllTenants(c *gin.Context) {
 func (h *SystemHandler) ResetSystemSetting(c *gin.Context) {
 	ctx := logger.CloneContext(c.Request.Context())
 	key := c.Param("key")
+	if key == service.LDAPConfigSettingKey {
+		c.JSON(http.StatusNotFound, gin.H{"error": "use the LDAP configuration endpoint"})
+		return
+	}
 	if err := h.systemSettingSvc.Reset(ctx, key); err != nil {
 		// Service surfaces "unknown key" as a plain error string; treat
 		// every error as 400 so the UI captures it as a toast. A real

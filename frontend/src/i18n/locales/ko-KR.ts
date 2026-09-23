@@ -1,4 +1,19 @@
 export default {
+  ldapSettings: {
+    navLabel: 'LDAP 로그인', title: 'LDAP / Active Directory', description: '기업 디렉터리 로그인을 설정합니다. 변경 사항은 즉시 적용되며 시스템 관리자만 사용할 수 있습니다.',
+    loading: 'LDAP 구성을 불러오는 중...', loadFailed: 'LDAP 구성을 불러오지 못했습니다', statusEnabled: '사용', statusDisabled: '사용 안 함',
+    securityHint: '디렉터리 비밀번호는 이번 로그인에만 사용되며 WeKnora에 저장되지 않습니다. Bind 비밀번호는 다시 표시되지 않습니다.',
+    enabled: 'LDAP 로그인 사용', enabledDescription: '로그인 페이지에 LDAP / Active Directory 로그인 옵션을 표시합니다.',
+    autoProvision: '첫 로그인 시 사용자 생성', autoProvisionDescription: '디렉터리 사용자가 처음 로그인하면 WeKnora 계정을 생성합니다.',
+    connectionTitle: '연결', url: 'LDAP URL', urlPlaceholder: 'ldaps://ldap.example.com:636', startTLS: 'StartTLS 사용', startTLSDescription: 'ldap:// URL에서만 필요하며 ldaps://는 이미 TLS를 사용합니다.',
+    searchAccountTitle: '디렉터리 검색 계정', bindDN: 'Bind DN', bindDNPlaceholder: 'cn=weknora,ou=service,dc=example,dc=com',
+    bindPassword: 'Bind 비밀번호', bindPasswordPlaceholder: '디렉터리 검색 계정 비밀번호 입력', bindPasswordRetained: '저장됨, 비워 두면 유지', bindPasswordHint: '비워 두어도 저장된 비밀번호는 삭제되지 않습니다.',
+    userLookupTitle: '사용자 검색', baseDN: '사용자 Base DN', baseDNPlaceholder: 'ou=users,dc=example,dc=com',
+    userFilter: '사용자 필터', userFilterPlaceholder: '(&(objectClass=person)(uid={username}))', userFilterHint: '{username}을 포함해야 하며 로그인 이름은 검색 전에 안전하게 이스케이프됩니다.',
+    usernameAttribute: '사용자 이름 속성', usernameAttributePlaceholder: 'uid 또는 sAMAccountName', emailAttribute: '이메일 속성', emailAttributePlaceholder: 'mail',
+    save: '구성 저장', saving: '저장 중...', saveSuccess: 'LDAP 구성을 저장했습니다', saveFailed: 'LDAP 구성 저장에 실패했습니다',
+    reset: '환경 구성 복원', resetConfirm: '데이터베이스 LDAP 재정의를 삭제하고 환경 구성을 복원합니다. 계속하시겠습니까?', resetSuccess: '환경 구성을 복원했습니다', resetFailed: 'LDAP 구성 복원에 실패했습니다',
+  },
   localBrowser: {
     pipOpen: "미리보기 팝업 열기",
     pipReturn: "대화 내 미리보기로 돌아가기",
@@ -5061,6 +5076,8 @@ export default {
   },
   auth: {
     login: '로그인',
+    localLogin: '로컬 계정 사용', ldapLogin: 'LDAP로 로그인', ldapUsername: 'LDAP 사용자 이름',
+    ldapUsernamePlaceholder: '도메인 계정 또는 사용자 이름 입력', ldapUsernameRequired: 'LDAP 사용자 이름을 입력하세요', ldapLoginError: 'LDAP 로그인에 실패했습니다. 사용자 이름 또는 비밀번호를 확인하세요.',
     logout: '로그아웃',
     oidcLogin: 'OIDC로 로그인',
     oidcLoginWithProvider: '{provider}(으)로 로그인',

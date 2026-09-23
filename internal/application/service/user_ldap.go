@@ -17,14 +17,18 @@ type ldapSubjectLookup interface {
 }
 
 func (s *userService) LoginWithLDAP(ctx context.Context, username, password string) (*types.LoginResponse, error) {
-	if s.config == nil || s.config.LDAPAuth == nil || !s.config.LDAPAuth.Enable {
+	cfg, err := ResolveLDAPConfig(ctx, s.config, s.systemSettingSvc)
+	if err != nil {
+		return nil, err
+	}
+	if !cfg.Enable {
 		return nil, errors.New("LDAP login is not enabled")
 	}
 	authenticate := s.ldapAuthenticator
 	if authenticate == nil {
 		authenticate = ldapauth.Authenticate
 	}
-	identity, err := authenticate(username, password, s.config.LDAPAuth)
+	identity, err := authenticate(username, password, cfg)
 	if errors.Is(err, ldapauth.ErrInvalidLDAPCredentials) {
 		return &types.LoginResponse{Success: false, Message: "Invalid username or password"}, nil
 	}
@@ -40,7 +44,7 @@ func (s *userService) LoginWithLDAP(ctx context.Context, username, password stri
 		return nil, fmt.Errorf("lookup LDAP account: %w", err)
 	}
 	if user == nil {
-		if !s.config.LDAPAuth.AutoProvision {
+		if !cfg.AutoProvision {
 			return &types.LoginResponse{Success: false, Message: "LDAP account is not provisioned"}, nil
 		}
 		// Email uniqueness deliberately rejects collisions with local/OIDC
@@ -56,7 +60,7 @@ func (s *userService) LoginWithLDAP(ctx context.Context, username, password stri
 			return nil, fmt.Errorf("generate LDAP account password: %w", err)
 		}
 		provisioning := types.TenantProvisioningCreatePersonal
-		if s.config.Auth != nil && s.config.Auth.DefaultTenantMode == config.AuthDefaultTenantModeTenantless {
+		if s.config != nil && s.config.Auth != nil && s.config.Auth.DefaultTenantMode == config.AuthDefaultTenantModeTenantless {
 			provisioning = types.TenantProvisioningTenantless
 		}
 		username := s.generateOIDCUsername(ctx, &types.OIDCUserInfo{Username: identity.Username, Email: identity.Email})

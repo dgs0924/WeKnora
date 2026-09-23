@@ -101,6 +101,10 @@ type settingSpec struct {
 // the new value, no in-memory state bound at init time we cannot
 // re-derive)".
 var registry = map[string]settingSpec{
+	"auth.ldap_config": {
+		Type: "string", Default: "", Category: "auth",
+		Description: "LDAP 配置（专用管理接口维护，服务账号密码加密存储）",
+	},
 	// NOTE: file.max_size_mb is intentionally NOT registered. Although
 	// the Go upload handlers accept a runtime override via
 	// systemSettingSvc.GetInt, the actual upload limit is gated end-to-end
@@ -752,6 +756,9 @@ func (s *systemSettingService) List(ctx context.Context) ([]*types.SystemSetting
 	// row visible would suggest it still controls runtime capacity, so retire it
 	// explicitly while preserving all genuinely unknown rows for diagnostics.
 	delete(byKey, "asynq.concurrency")
+	// The dedicated LDAP endpoint returns a redacted projection. Generic
+	// settings listings must not expose the stored credential ciphertext.
+	delete(byKey, LDAPConfigSettingKey)
 
 	keys := make([]string, 0, len(registry))
 	for key := range registry {
@@ -760,6 +767,9 @@ func (s *systemSettingService) List(ctx context.Context) ([]*types.SystemSetting
 	sort.Strings(keys)
 
 	for _, key := range keys {
+		if key == LDAPConfigSettingKey {
+			continue
+		}
 		spec := registry[key]
 		if row := byKey[key]; row != nil {
 			row.Enum = spec.Enum

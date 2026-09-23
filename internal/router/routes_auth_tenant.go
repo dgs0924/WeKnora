@@ -298,6 +298,9 @@ func RegisterSystemAdminRoutes(
 		adminRoutes.GET("/api-keys", handler.ListPlatformAPIKeys)
 		adminRoutes.POST("/api-keys", handler.CreatePlatformAPIKey)
 		adminRoutes.DELETE("/api-keys/:key_id", handler.DeletePlatformAPIKey)
+		adminRoutes.GET("/ldap", handler.GetLDAPConfig)
+		adminRoutes.PUT("/ldap", handler.UpdateLDAPConfig)
+		adminRoutes.DELETE("/ldap", handler.ResetLDAPConfig)
 
 		// P1: platform-wide system settings (DB-backed runtime tunables).
 		// Reads return raw model rows / arrays (no `gin.H{"data":...}`

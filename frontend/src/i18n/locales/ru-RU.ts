@@ -1,4 +1,19 @@
 export default {
+  ldapSettings: {
+    navLabel: 'LDAP', title: 'LDAP / Active Directory', description: 'Настройка входа через корпоративный каталог. Изменения вступают в силу сразу и доступны только системным администраторам.',
+    loading: 'Загрузка конфигурации LDAP...', loadFailed: 'Не удалось загрузить конфигурацию LDAP', statusEnabled: 'Включено', statusDisabled: 'Выключено',
+    securityHint: 'Пароли каталога используются только для входа и не сохраняются в WeKnora. Пароль Bind никогда не отображается.',
+    enabled: 'Включить вход LDAP', enabledDescription: 'Показывать вход LDAP / Active Directory на странице входа.',
+    autoProvision: 'Создавать пользователя при первом входе', autoProvisionDescription: 'Создавать аккаунт WeKnora при первом входе пользователя каталога.',
+    connectionTitle: 'Подключение', url: 'URL LDAP', urlPlaceholder: 'ldaps://ldap.example.com:636', startTLS: 'Использовать StartTLS', startTLSDescription: 'Требуется только для ldap://; ldaps:// уже использует TLS.',
+    searchAccountTitle: 'Учётная запись поиска каталога', bindDN: 'Bind DN', bindDNPlaceholder: 'cn=weknora,ou=service,dc=example,dc=com',
+    bindPassword: 'Пароль Bind', bindPasswordPlaceholder: 'Введите пароль учётной записи поиска', bindPasswordRetained: 'Сохранён; оставьте пустым, чтобы не менять', bindPasswordHint: 'Пустое поле не удаляет сохранённый пароль.',
+    userLookupTitle: 'Поиск пользователя', baseDN: 'Base DN пользователей', baseDNPlaceholder: 'ou=users,dc=example,dc=com',
+    userFilter: 'Фильтр пользователя', userFilterPlaceholder: '(&(objectClass=person)(uid={username}))', userFilterHint: 'Должен содержать {username}; имя входа безопасно экранируется перед поиском.',
+    usernameAttribute: 'Атрибут имени пользователя', usernameAttributePlaceholder: 'uid или sAMAccountName', emailAttribute: 'Атрибут email', emailAttributePlaceholder: 'mail',
+    save: 'Сохранить конфигурацию', saving: 'Сохранение...', saveSuccess: 'Конфигурация LDAP сохранена', saveFailed: 'Не удалось сохранить конфигурацию LDAP',
+    reset: 'Восстановить конфигурацию окружения', resetConfirm: 'Будет удалено переопределение LDAP из базы данных и восстановлена конфигурация окружения. Продолжить?', resetSuccess: 'Конфигурация окружения восстановлена', resetFailed: 'Не удалось восстановить конфигурацию LDAP',
+  },
   localBrowser: {
     pipOpen: "Открыть плавающее окно",
     pipReturn: "Вернуть предпросмотр в чат",
@@ -5061,6 +5076,8 @@ export default {
   },
   auth: {
     login: 'Вход',
+    localLogin: 'Использовать локальную учётную запись', ldapLogin: 'Войти через LDAP', ldapUsername: 'Имя пользователя LDAP',
+    ldapUsernamePlaceholder: 'Введите доменную учётную запись или имя пользователя', ldapUsernameRequired: 'Введите имя пользователя LDAP', ldapLoginError: 'Не удалось войти через LDAP. Проверьте имя пользователя и пароль.',
     logout: 'Выход',
     oidcLogin: 'Войти через OIDC',
     oidcLoginWithProvider: 'Войти через {provider}',
