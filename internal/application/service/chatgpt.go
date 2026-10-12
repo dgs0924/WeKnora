@@ -37,9 +37,23 @@ func isChatGPTModel(m *types.Model) bool {
 	return m != nil && m.Parameters.ExtraConfig[chatGPTPlanKey] == "true"
 }
 
+// isPersonalPlanModel identifies provider-managed plan references. These rows
+// never contain customer credentials and cannot be created, copied, edited or
+// shared through the ordinary model APIs.
+func isPersonalPlanModel(m *types.Model) bool {
+	return isChatGPTModel(m) || isCodexModel(m)
+}
+
 func ownsChatGPTModel(ctx context.Context, m *types.Model) bool {
 	uid, err := ChatGPTUser(ctx)
 	return err == nil && uid == m.Parameters.ExtraConfig[chatGPTOwnerKey] && !m.IsBuiltin
+}
+
+func ownsPersonalPlanModel(ctx context.Context, m *types.Model) bool {
+	if isChatGPTModel(m) {
+		return ownsChatGPTModel(ctx, m)
+	}
+	return ownsCodexModel(ctx, m)
 }
 
 // NewModelServiceWithChatGPT leaves the existing constructor usable by tests

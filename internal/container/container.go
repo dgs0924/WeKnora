@@ -256,7 +256,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 		}
 		return chatgpt.NewManager(dir)
 	}))
-	must(container.Provide(service.NewModelServiceWithChatGPT))
+	must(container.Provide(service.NewCodexConnectionFromEnvironment))
+	must(container.Provide(service.NewModelServiceWithChatGPTAndCodex))
 	must(container.Provide(service.NewDatasetService))
 	must(container.Provide(service.NewEvaluationService))
 	must(container.Provide(service.NewUserService))
@@ -555,6 +556,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewMessageSuggestionHandler))
 	must(container.Provide(handler.NewModelHandler))
 	must(container.Provide(handler.NewChatGPTHandler))
+	must(container.Provide(handler.NewCodexHandler))
 	must(container.Provide(handler.NewSandboxConfigHandler))
 	must(container.Provide(func(
 		s *service.TenantSkillService, streams interfaces.StreamManager,

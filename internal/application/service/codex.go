@@ -1,0 +1,203 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/Tencent/WeKnora/internal/chatgpt"
+	"github.com/Tencent/WeKnora/internal/codex"
+	apperrors "github.com/Tencent/WeKnora/internal/errors"
+	"github.com/Tencent/WeKnora/internal/models/api"
+	"github.com/Tencent/WeKnora/internal/models/chat"
+	"github.com/Tencent/WeKnora/internal/models/embedding"
+	"github.com/Tencent/WeKnora/internal/models/utils/ollama"
+	"github.com/Tencent/WeKnora/internal/types"
+	"github.com/Tencent/WeKnora/internal/types/interfaces"
+)
+
+const codexPlanKey = "codex_plan"
+const codexOwnerKey = "codex_owner"
+
+// CodexConnection is intentionally deployment scoped: the owner is selected
+// by trusted process configuration, never by an HTTP request or model row.
+// An empty owner disables this optional integration completely.
+type CodexConnection struct {
+	Runtime *codex.Runtime
+	Owner   string
+	Err     error
+}
+
+func NewCodexConnectionFromEnvironment() (*CodexConnection, error) {
+	owner := strings.TrimSpace(os.Getenv("WEKNORA_CODEX_OWNER_USER_ID"))
+	if owner == "" {
+		return &CodexConnection{}, nil
+	}
+	timeout := 2 * time.Minute
+	if raw := strings.TrimSpace(os.Getenv("WEKNORA_CODEX_TIMEOUT_SECONDS")); raw != "" {
+		seconds, err := strconv.Atoi(raw)
+		if err != nil || seconds < 1 || seconds > 600 {
+			return nil, fmt.Errorf("invalid WEKNORA_CODEX_TIMEOUT_SECONDS")
+		}
+		timeout = time.Duration(seconds) * time.Second
+	}
+	maxOutput := 4 << 20
+	if raw := strings.TrimSpace(os.Getenv("WEKNORA_CODEX_MAX_OUTPUT_BYTES")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1024 || value > 64<<20 {
+			return nil, fmt.Errorf("invalid WEKNORA_CODEX_MAX_OUTPUT_BYTES")
+		}
+		maxOutput = value
+	}
+	runtime, err := codex.New(codex.Config{
+		Binary:         strings.TrimSpace(os.Getenv("WEKNORA_CODEX_BINARY")),
+		Home:           strings.TrimSpace(os.Getenv("WEKNORA_CODEX_HOME")),
+		WorkDir:        strings.TrimSpace(os.Getenv("WEKNORA_CODEX_WORKDIR")),
+		Timeout:        timeout,
+		MaxOutputBytes: maxOutput,
+	})
+	if err != nil {
+		return &CodexConnection{Owner: owner, Err: err}, nil
+	}
+	return &CodexConnection{Runtime: runtime, Owner: owner}, nil
+}
+
+// CodexUser admits only the configured web-session user. A background worker
+// may use it only after restoring a trusted TaskInitiator for that same user;
+// API-key and actorless contexts are rejected.
+func CodexUser(ctx context.Context, owner string) (string, error) {
+	uid, err := ChatGPTUser(ctx)
+	if err != nil || owner == "" || uid != owner {
+		return "", apperrors.NewForbiddenError("Codex plan requires the configured personal web account")
+	}
+	return uid, nil
+}
+
+func isCodexModel(m *types.Model) bool {
+	return m != nil && m.Parameters.ExtraConfig[codexPlanKey] == "true"
+}
+
+func ownsCodexModel(ctx context.Context, m *types.Model) bool {
+	if !isCodexModel(m) || m.IsBuiltin {
+		return false
+	}
+	configuredOwner := strings.TrimSpace(os.Getenv("WEKNORA_CODEX_OWNER_USER_ID"))
+	if configuredOwner == "" || configuredOwner != m.Parameters.ExtraConfig[codexOwnerKey] {
+		return false
+	}
+	uid, err := ChatGPTUser(ctx)
+	return err == nil && uid == configuredOwner
+}
+
+func NewModelServiceWithChatGPTAndCodex(repo interfaces.ModelRepository, kb interfaces.KnowledgeBaseRepository,
+	agents interfaces.CustomAgentRepository, ol *ollama.OllamaService, pool embedding.EmbedderPooler,
+	tenants interfaces.TenantService, accounts *chatgpt.Manager, connection *CodexConnection,
+) interfaces.ModelService {
+	s := NewModelService(repo, kb, agents, ol, pool, tenants).(*modelService)
+	s.chatGPT = accounts
+	if connection != nil {
+		s.codex = connection.Runtime
+		s.codexOwner = connection.Owner
+	}
+	return s
+}
+
+// EnableCodexModel persists only a model reference. The logged-in Codex CLI
+// state remains outside the database and cannot be forged from model fields.
+func EnableCodexModel(ctx context.Context, connection *CodexConnection, repo interfaces.ModelRepository, slug string) (*types.Model, error) {
+	if connection == nil || connection.Runtime == nil {
+		return nil, apperrors.NewForbiddenError("Codex plan is not enabled on this server")
+	}
+	uid, err := CodexUser(ctx, connection.Owner)
+	if err != nil {
+		return nil, err
+	}
+	status, err := connection.Runtime.Status(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !status.LoggedIn {
+		return nil, apperrors.NewForbiddenError("Codex CLI is not signed in")
+	}
+	slug = strings.TrimSpace(slug)
+	if slug == "" {
+		return nil, apperrors.NewBadRequestError("select an available Codex model")
+	}
+	models, err := connection.Runtime.Models(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var selected *codex.Model
+	for i := range models {
+		if models[i].ID == slug || models[i].Name == slug {
+			selected = &models[i]
+			break
+		}
+	}
+	if selected == nil {
+		return nil, apperrors.NewBadRequestError("select an available Codex model")
+	}
+	tenantID := types.MustTenantIDFromContext(ctx)
+	name := selected.Name
+	if name == "" {
+		name = selected.ID
+	}
+	rows, err := repo.List(ctx, tenantID, types.ModelTypeKnowledgeQA, "")
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		if row.Name == name && isCodexModel(row) && ownsCodexModel(ctx, row) {
+			return row, nil
+		}
+	}
+	display := selected.DisplayName
+	if display == "" {
+		display = name
+	}
+	// A removed model is soft-deleted. A fresh ID allows the owner to enable
+	// it again without colliding with the historical row's primary key.
+	m := &types.Model{ID: uuid.NewString(), TenantID: tenantID, Name: name, DisplayName: "Codex · " + display,
+		Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceRemote, Status: types.ModelStatusActive,
+		Description: "Uses the server's configured Codex account for the designated personal user", ManagedBy: "codex",
+		Parameters: types.ModelParameters{Provider: "openai", ExtraConfig: map[string]string{codexPlanKey: "true", codexOwnerKey: uid},
+			Spec: &types.ModelSpecOverride{API: string(api.APIOpenAIResponses), Input: []string{"text"}}},
+	}
+	if err := repo.Create(ctx, m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+type personalCodexChat struct {
+	runtime         *codex.Runtime
+	owner, name, id string
+}
+
+func (c *personalCodexChat) GetModelName() string { return c.name }
+func (c *personalCodexChat) GetModelID() string   { return c.id }
+func (c *personalCodexChat) Chat(ctx context.Context, messages []chat.Message, opts *chat.ChatOptions) (*types.ChatResponse, error) {
+	client, err := c.client(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return client.Chat(ctx, messages, opts)
+}
+func (c *personalCodexChat) ChatStream(ctx context.Context, messages []chat.Message, opts *chat.ChatOptions) (<-chan types.StreamResponse, error) {
+	client, err := c.client(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return client.ChatStream(ctx, messages, opts)
+}
+func (c *personalCodexChat) client(ctx context.Context) (chat.Chat, error) {
+	if _, err := CodexUser(ctx, c.owner); err != nil || c.runtime == nil {
+		return nil, apperrors.NewForbiddenError("Codex model belongs to another account")
+	}
+	return c.runtime.Chat(c.name, c.id), nil
+}

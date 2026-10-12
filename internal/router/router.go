@@ -58,6 +58,7 @@ type RouterParams struct {
 	MessageSuggestionHandler     *handler.MessageSuggestionHandler
 	ModelHandler                 *handler.ModelHandler
 	ChatGPTHandler               *handler.ChatGPTHandler `optional:"true"`
+	CodexHandler                 *handler.CodexHandler   `optional:"true"`
 	ModelCredentialsHandler      *handler.ModelCredentialsHandler
 	SandboxConfigHandler         *handler.SandboxConfigHandler
 	SandboxSkillHandler          *handler.SandboxSkillHandler
@@ -304,6 +305,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterSandboxConfigRoutes(v1, params.SandboxConfigHandler, params.SandboxSkillHandler, rbacGuards)
 		RegisterMyEnvVarRoutes(v1, params.MeEnvVarHandler)
 		RegisterChatGPTRoutes(v1, params.ChatGPTHandler)
+		RegisterCodexRoutes(v1, params.CodexHandler)
 		v1.GET("/me/browser", params.SessionHandler.BrowserSkillAccount)
 		v1.GET("/me/browser/extension", params.SessionHandler.BrowserSkillDownload)
 		v1.POST("/me/browser", params.SessionHandler.BrowserSkillAccount)

@@ -33,6 +33,9 @@ export default {
     modelsTitle: '사용 가능한 모델', modelsDescription: '모델을 활성화하면 이 개인 ChatGPT 연결용 WeKnora 모델 선택기에 추가됩니다.', modelsPending: '사용 가능한 모델을 보려면 먼저 ChatGPT를 연결하세요.', modelsLoading: '사용 가능한 모델을 불러오는 중...', modelsEmpty: '이 계정에서 사용할 수 있는 ChatGPT 모델이 없습니다.', modelsLoadFailed: 'ChatGPT 모델을 불러오지 못했습니다', enableModel: 'WeKnora에서 활성화', modelEnabled: '활성화됨', modelEnabledSuccess: 'WeKnora에서 모델을 활성화했습니다', modelEnableFailed: '이 모델을 활성화하지 못했습니다',
     usageTitle: '연결 사용 방식', usageHint: 'WeKnora는 이 페이지에 ChatGPT 비밀번호를 표시하거나 저장하지 않습니다. 더 이상 사용하지 않을 경우 여기서 연결을 해제하거나 ChatGPT에서 구독을 관리하세요.', welcomeTitle: 'ChatGPT가 준비되었습니다', welcomeDescription: '아래에서 모델을 활성화한 다음 WeKnora의 기존 모델 선택기에서 개인 대화 요청용으로 선택하세요.', welcomeConfirm: '확인',
   },
+  codexSettings: {
+    title: '서버 Codex 계정', description: '서버에 로그인된 Codex 계정의 대화 모델을 활성화합니다. 브라우저 콜백이나 비밀번호 입력이 필요하지 않습니다.', connectionTitle: '서버 로그인 상태', connected: '서버에 로그인됨', notConnected: '서버에 로그인되지 않음', connectedDescription: '이 계정은 연결된 사용자가 시작한 대화 요청에만 사용할 수 있습니다.', notConnectedDescription: '서버에서 Codex CLI에 로그인한 후 상태를 새로 고치세요.', connectedAccount: '서버 계정: {email}', plan: '요금제: {plan}', statusLoadFailed: '서버 Codex 상태를 불러오지 못했습니다. 다시 시도하세요.', modelsLoading: '서버 Codex 모델을 불러오는 중...', modelsEmpty: '이 서버 계정에서 사용할 수 있는 Codex 모델이 없습니다.', modelsLoadFailed: '서버 Codex 모델을 불러오지 못했습니다', enableModel: 'WeKnora에서 활성화', modelEnabled: '활성화됨', modelEnabledSuccess: 'Codex 모델이 WeKnora에서 활성화되었습니다', modelEnableFailed: 'Codex 모델을 활성화하지 못했습니다', usageTitle: '사용 범위', usageHint: '서버 Codex 자격 증명은 표시하거나 내보내지 않습니다. 이 연결은 대화 모델만 지원하며 임베딩, 리랭킹 및 이미지 모델은 사용할 수 없습니다.',
+  },
   modelCatalog: {
     "title": "모델 카탈로그",
     "description": "모델 카탈로그는 모델 추가 시 선택할 수 있는 모델 목록과 컨텍스트 창, 추론 지원 여부 같은 기본값을 정의합니다. 여기서 변경하면 모든 워크스페이스에 즉시 적용됩니다.",

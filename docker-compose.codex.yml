@@ -1,0 +1,14 @@
+# Optional personal Codex connection. Login on the server as the credential
+# owner first; never copy auth.json into an image or expose app-server over TCP.
+services:
+  app:
+    environment:
+      WEKNORA_CODEX_OWNER_USER_ID: ${WEKNORA_CODEX_OWNER_USER_ID:?Set the personal WeKnora user ID}
+      WEKNORA_CODEX_BINARY: /opt/weknora-codex/bin/codex
+      WEKNORA_CODEX_HOME: /data/codex
+      WEKNORA_CODEX_WORKDIR: /data/codex-work
+    volumes:
+      - ${CODEX_HOST_VENDOR_DIR:?Set the matching Codex vendor directory}:/opt/weknora-codex:ro
+      - ${CODEX_HOST_HOME:?Set the logged-in user's Codex directory}:/data/codex
+    tmpfs:
+      - /data/codex-work:uid=1000,gid=1000,mode=0700

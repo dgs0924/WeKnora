@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/Tencent/WeKnora/internal/codex"
 	apperrors "github.com/Tencent/WeKnora/internal/errors"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/models/asr"
@@ -28,6 +29,8 @@ var ErrModelNotFound = errors.New("model not found")
 // modelService implements the model service interface
 type modelService struct {
 	chatGPT       chatGPTTokenSource
+	codex         *codex.Runtime
+	codexOwner    string
 	repo          interfaces.ModelRepository
 	kbRepo        interfaces.KnowledgeBaseRepository
 	agentRepo     interfaces.CustomAgentRepository
@@ -100,8 +103,8 @@ func (s *modelService) resolveWeKnoraCloudCredentials(ctx context.Context, param
 // For local models, it initiates an asynchronous download process
 // Remote models are immediately set to active status
 func (s *modelService) CreateModel(ctx context.Context, model *types.Model) error {
-	if isChatGPTModel(model) {
-		return apperrors.NewForbiddenError("use personal ChatGPT settings to enable models")
+	if isPersonalPlanModel(model) {
+		return apperrors.NewForbiddenError("personal plan models are enabled from their connection settings")
 	}
 	logger.Infof(ctx, "Creating model: %s, type: %s, source: %s", model.Name, model.Type, model.Source)
 
@@ -173,8 +176,8 @@ func (s *modelService) CopyModel(ctx context.Context, sourceID, displayName stri
 	if source == nil {
 		return nil, ErrModelNotFound
 	}
-	if isChatGPTModel(source) {
-		return nil, apperrors.NewForbiddenError("ChatGPT models cannot be copied; enable them in personal settings")
+	if isPersonalPlanModel(source) {
+		return nil, apperrors.NewForbiddenError("personal plan models cannot be copied; enable them in connection settings")
 	}
 	if source.IsBuiltin {
 		return nil, apperrors.NewBadRequestError("builtin models cannot be copied")
@@ -280,8 +283,8 @@ func (s *modelService) GetModelByID(ctx context.Context, id string) (*types.Mode
 		return nil, ErrModelNotFound
 	}
 
-	if isChatGPTModel(model) && !ownsChatGPTModel(ctx, model) {
-		return nil, apperrors.NewForbiddenError("ChatGPT model belongs to another account")
+	if isPersonalPlanModel(model) && !ownsPersonalPlanModel(ctx, model) {
+		return nil, apperrors.NewForbiddenError("personal plan model is unavailable to this account")
 	}
 	logger.Infof(ctx, "Model found, name: %s, status: %s", model.Name, model.Status)
 
@@ -322,7 +325,7 @@ func (s *modelService) ListModels(ctx context.Context) ([]*types.Model, error) {
 
 	visible := models[:0]
 	for _, model := range models {
-		if !isChatGPTModel(model) || ownsChatGPTModel(ctx, model) {
+		if !isPersonalPlanModel(model) || ownsPersonalPlanModel(ctx, model) {
 			visible = append(visible, model)
 		}
 	}
@@ -346,11 +349,11 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 		})
 		return err
 	}
-	if isChatGPTModel(existingModel) {
-		return apperrors.NewForbiddenError("ChatGPT model references are managed by personal connection settings")
+	if isPersonalPlanModel(existingModel) {
+		return apperrors.NewForbiddenError("personal plan model references are managed by connection settings")
 	}
-	if isChatGPTModel(model) {
-		return apperrors.NewForbiddenError("use personal ChatGPT settings to enable models")
+	if isPersonalPlanModel(model) {
+		return apperrors.NewForbiddenError("personal plan models are enabled from their connection settings")
 	}
 	if existingModel != nil && existingModel.IsBuiltin {
 		if !types.IsSystemAdminFromContext(ctx) {
@@ -394,8 +397,8 @@ func (s *modelService) UpdateModelCredentials(
 	if existing == nil {
 		return nil, ErrModelNotFound
 	}
-	if isChatGPTModel(existing) {
-		return nil, apperrors.NewForbiddenError("ChatGPT connections do not accept API credentials")
+	if isPersonalPlanModel(existing) {
+		return nil, apperrors.NewForbiddenError("personal plan connections do not accept API credentials")
 	}
 	if existing.IsBuiltin && !types.IsSystemAdminFromContext(ctx) {
 		return nil, apperrors.NewForbiddenError(
@@ -435,8 +438,8 @@ func (s *modelService) ClearModelCredential(ctx context.Context, id, field strin
 	if existing == nil {
 		return ErrModelNotFound
 	}
-	if isChatGPTModel(existing) {
-		return apperrors.NewForbiddenError("ChatGPT connections are managed in personal settings")
+	if isPersonalPlanModel(existing) {
+		return apperrors.NewForbiddenError("personal plan connections are managed in connection settings")
 	}
 	if existing.IsBuiltin && !types.IsSystemAdminFromContext(ctx) {
 		return apperrors.NewForbiddenError(
@@ -489,6 +492,9 @@ func (s *modelService) DeleteModel(ctx context.Context, id string) error {
 	}
 	if existingModel == nil {
 		return ErrModelNotFound
+	}
+	if isCodexModel(existingModel) && !ownsCodexModel(ctx, existingModel) {
+		return apperrors.NewForbiddenError("Codex model belongs to another account")
 	}
 	if existingModel.IsBuiltin {
 		logger.Warnf(ctx, "Attempted to delete builtin model: %s", id)
@@ -611,6 +617,9 @@ func (s *modelService) GetEmbeddingModel(ctx context.Context, modelId string) (e
 		})
 		return nil, err
 	}
+	if isPersonalPlanModel(model) {
+		return nil, apperrors.NewBadRequestError("personal plan models support chat only")
+	}
 
 	logger.Infof(ctx, "Getting embedding model: %s, source: %s", model.Name, model.Source)
 
@@ -658,6 +667,9 @@ func (s *modelService) GetEmbeddingModelForTenant(ctx context.Context, modelId s
 		logger.Errorf(ctx, "Model is not active, status: %s", model.Status)
 		return nil, errors.New("model is not active")
 	}
+	if isPersonalPlanModel(model) {
+		return nil, apperrors.NewBadRequestError("personal plan models cannot be used for cross-tenant embedding")
+	}
 
 	logger.Infof(ctx, "Getting cross-tenant embedding model: %s, source: %s, tenant: %d", model.Name, model.Source, tenantID)
 
@@ -672,7 +684,6 @@ func (s *modelService) GetEmbeddingModelForTenant(ctx context.Context, modelId s
 		})
 		return nil, err
 	}
-
 	logger.Info(ctx, "Cross-tenant embedding model initialized successfully")
 	return embedder, nil
 }
@@ -687,6 +698,10 @@ func (s *modelService) GetRerankModel(ctx context.Context, modelId string) (rera
 			"model_id": modelId,
 		})
 		return nil, err
+	}
+
+	if isPersonalPlanModel(model) {
+		return nil, apperrors.NewBadRequestError("personal plan models support chat only")
 	}
 
 	logger.Infof(ctx, "Getting rerank model: %s, source: %s", model.Name, model.Source)
@@ -744,6 +759,18 @@ func (s *modelService) GetChatModel(ctx context.Context, modelId string) (chat.C
 		}
 		return &personalChatGPTChat{accounts: s.chatGPT, owner: model.Parameters.ExtraConfig[chatGPTOwnerKey], name: model.Name, id: model.ID}, nil
 	}
+	if isCodexModel(model) {
+		if s.codex == nil {
+			return nil, errors.New("Codex connection is unavailable")
+		}
+		if _, err := CodexUser(ctx, s.codexOwner); err != nil || !ownsCodexModel(ctx, model) {
+			return nil, apperrors.NewForbiddenError("Codex model belongs to another account")
+		}
+		if model.Type != types.ModelTypeKnowledgeQA {
+			return nil, apperrors.NewBadRequestError("selected Codex model is not a chat model")
+		}
+		return &personalCodexChat{runtime: s.codex, owner: s.codexOwner, name: model.Name, id: model.ID}, nil
+	}
 	logger.Infof(ctx, "Getting chat model: %s, source: %s", model.Name, model.Source)
 
 	appID, appSecret := s.resolveWeKnoraCloudCredentials(ctx, &model.Parameters)
@@ -779,6 +806,9 @@ func (s *modelService) GetVLMModel(ctx context.Context, modelId string) (vlm.VLM
 
 	if model == nil {
 		return nil, ErrModelNotFound
+	}
+	if isCodexModel(model) {
+		return nil, apperrors.NewBadRequestError("Codex plan models do not support vision")
 	}
 	if isChatGPTModel(model) {
 		if s.chatGPT == nil {
@@ -837,6 +867,9 @@ func (s *modelService) GetASRModel(ctx context.Context, modelId string) (asr.ASR
 
 	if model == nil {
 		return nil, ErrModelNotFound
+	}
+	if isPersonalPlanModel(model) {
+		return nil, apperrors.NewBadRequestError("personal plan models support chat only")
 	}
 
 	logger.Infof(ctx, "Getting ASR model: %s, source: %s", model.Name, model.Source)

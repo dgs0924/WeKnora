@@ -34,6 +34,9 @@ export default {
     modelsTitle: '可用模型', modelsDescription: '啟用模型後，它會加入 WeKnora 的模型選擇器，供此個人 ChatGPT 連結使用。', modelsPending: '請先連結 ChatGPT，再查看帳號可用模型。', modelsLoading: '正在載入可用模型...', modelsEmpty: '此帳號沒有可用的 ChatGPT 模型。', modelsLoadFailed: '載入 ChatGPT 模型失敗', enableModel: '在 WeKnora 中啟用', modelEnabled: '已啟用', modelEnabledSuccess: '模型已在 WeKnora 中啟用', modelEnableFailed: '啟用此模型失敗',
     usageTitle: '連結用途', usageHint: 'WeKnora 不會在此頁面顯示或儲存您的 ChatGPT 密碼。不再使用時，可在這裡中斷連結，或前往 ChatGPT 管理訂閱。', welcomeTitle: 'ChatGPT 已就緒', welcomeDescription: '請在下方啟用模型，然後在 WeKnora 現有模型選擇器中選用它處理您個人發起的互動請求。', welcomeConfirm: '知道了',
   },
+  codexSettings: {
+    title: '伺服器 Codex 帳號', description: '使用已在伺服器登入的 Codex 帳號啟用對話模型，無需瀏覽器回呼或輸入密碼。', connectionTitle: '伺服器登入狀態', connected: '已在伺服器登入', notConnected: '尚未在伺服器登入', connectedDescription: '此帳號只供目前綁定使用者發起的對話請求使用。', notConnectedDescription: '請先在伺服器完成 Codex CLI 登入，再重新整理狀態。', connectedAccount: '伺服器帳號：{email}', plan: '訂閱：{plan}', statusLoadFailed: '無法讀取伺服器 Codex 狀態，請重試。', modelsLoading: '正在載入伺服器 Codex 模型...', modelsEmpty: '此伺服器帳號沒有可用的 Codex 模型。', modelsLoadFailed: '載入伺服器 Codex 模型失敗', enableModel: '在 WeKnora 中啟用', modelEnabled: '已啟用', modelEnabledSuccess: 'Codex 模型已在 WeKnora 中啟用', modelEnableFailed: '啟用 Codex 模型失敗', usageTitle: '使用範圍', usageHint: '伺服器 Codex 憑據不會顯示或匯出。此連線僅支援對話模型，不支援向量、重排或圖像模型。',
+  },
   modelCatalog: {
     "title": "模型目錄",
     "description": "模型目錄決定新增模型時可選的模型清單，以及脈絡視窗、是否支持思考等預設參數。在這裡修改後，所有空間立即生效。",

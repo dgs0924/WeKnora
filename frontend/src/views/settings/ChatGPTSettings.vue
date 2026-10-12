@@ -124,6 +124,76 @@
         {{ t('chatgptSettings.usageHint') }}
       </t-alert>
 
+      <section v-if="codexVisible" class="settings-group chatgpt-settings__codex">
+        <div class="chatgpt-settings__models-heading">
+          <h3>{{ t('codexSettings.title') }}</h3>
+          <p>{{ t('codexSettings.description') }}</p>
+        </div>
+
+        <t-alert v-if="codexStatusLoadFailed" theme="warning" :title="t('codexSettings.statusLoadFailed')">
+          <t-button variant="outline" :loading="codexLoading" @click="loadCodex">{{ t('common.refresh') }}</t-button>
+        </t-alert>
+
+        <template v-else-if="codexStatus">
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">{{ t('codexSettings.connectionTitle') }}</div>
+            <p class="desc">{{ codexConnectionDescription }}</p>
+            <p v-if="codexStatus.email" class="chatgpt-settings__email">
+              {{ t('codexSettings.connectedAccount', { email: codexStatus.email }) }}
+            </p>
+            <p v-if="codexStatus.plan" class="desc">{{ t('codexSettings.plan', { plan: codexStatus.plan }) }}</p>
+          </div>
+          <div class="setting-control chatgpt-settings__connection-actions">
+            <t-tag :theme="codexStatus.connected ? 'success' : 'default'" variant="light">
+              {{ codexStatus.connected ? t('codexSettings.connected') : t('codexSettings.notConnected') }}
+            </t-tag>
+            <t-button variant="outline" size="small" :loading="codexLoading" @click="loadCodex">
+              {{ t('common.refresh') }}
+            </t-button>
+          </div>
+        </div>
+
+        <template v-if="codexStatus.connected">
+          <div v-if="codexModelsLoading" class="chatgpt-settings__models-loading">
+            <t-loading :text="t('codexSettings.modelsLoading')" size="small" />
+          </div>
+          <t-alert v-else-if="codexModelsLoadFailed" theme="warning" :title="t('codexSettings.modelsLoadFailed')">
+            <t-button variant="outline" @click="loadCodexModels">{{ t('common.refresh') }}</t-button>
+          </t-alert>
+          <t-empty v-else-if="codexModels.length === 0" :description="t('codexSettings.modelsEmpty')" />
+          <div v-else class="chatgpt-settings__model-list">
+            <div v-for="model in codexModels" :key="model.slug" class="chatgpt-settings__model-row">
+              <div>
+                <div class="chatgpt-settings__model-name">{{ model.display_name }}</div>
+                <code>{{ model.slug }}</code>
+              </div>
+              <div class="chatgpt-settings__model-action">
+                <t-tag v-if="enabledCodexModelSlugs.has(model.slug)" theme="success" variant="light">
+                  {{ t('codexSettings.modelEnabled') }}
+                </t-tag>
+                <t-button
+                  v-else
+                  theme="primary"
+                  variant="outline"
+                  size="small"
+                  :loading="selectingCodexSlug === model.slug"
+                  :disabled="!!selectingCodexSlug"
+                  @click="enableCodexModel(model.slug)"
+                >
+                  {{ t('codexSettings.enableModel') }}
+                </t-button>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <t-alert theme="info" class="chatgpt-settings__usage" :title="t('codexSettings.usageTitle')">
+          {{ t('codexSettings.usageHint') }}
+        </t-alert>
+        </template>
+      </section>
+
       <t-dialog
         v-model:visible="welcomeDialogVisible"
         :header="t('chatgptSettings.welcomeTitle')"
@@ -151,6 +221,7 @@ import {
   type ChatGPTModel,
 } from '@/api/chatgpt'
 import { chatGPTAuthorizationOutcome } from '@/api/chatgptAuthorization'
+import { getCodexStatus, listCodexModels, selectCodexModel, type CodexConnectionStatus, type CodexModel } from '@/api/codex'
 import { useChatResourcesStore } from '@/stores/chatResources'
 
 const { t } = useI18n()
@@ -168,6 +239,14 @@ const enabledModelSlugs = ref(new Set<string>())
 const authorizationPopupBlocked = ref(false)
 const authorizationUrl = ref('')
 const welcomeDialogVisible = ref(false)
+const codexLoading = ref(false)
+const codexStatusLoadFailed = ref(false)
+const codexModelsLoading = ref(false)
+const codexModelsLoadFailed = ref(false)
+const selectingCodexSlug = ref('')
+const codexStatus = ref<CodexConnectionStatus | null>(null)
+const codexModels = ref<CodexModel[]>([])
+const enabledCodexModelSlugs = ref(new Set<string>())
 
 let pollTimer: number | null = null
 let authorizationPopup: Window | null = null
@@ -186,6 +265,58 @@ const connectionDescription = computed(() => {
   if (status.value?.connected) return t('chatgptSettings.connectedDescription')
   return t('chatgptSettings.notConnectedDescription')
 })
+
+const codexConnectionDescription = computed(() => (
+  codexStatus.value?.connected
+    ? t('codexSettings.connectedDescription')
+    : t('codexSettings.notConnectedDescription')
+))
+const codexVisible = computed(() => !!codexStatus.value?.enabled || codexStatusLoadFailed.value)
+
+async function loadCodexModels() {
+  if (!codexStatus.value?.connected) {
+    codexModels.value = []
+    return
+  }
+  codexModelsLoading.value = true
+  codexModelsLoadFailed.value = false
+  try {
+    const availableModels = await listCodexModels()
+    if (unmounted) return
+    codexModels.value = availableModels
+    enabledCodexModelSlugs.value = new Set(availableModels.filter((model) => !!model.id).map((model) => model.slug))
+  } catch {
+    if (unmounted) return
+    codexModels.value = []
+    codexModelsLoadFailed.value = true
+  } finally {
+    if (!unmounted) codexModelsLoading.value = false
+  }
+}
+
+async function loadCodex() {
+  codexLoading.value = true
+  try {
+    const nextStatus = await getCodexStatus()
+    if (unmounted) return
+    codexStatus.value = nextStatus
+    codexStatusLoadFailed.value = false
+    if (nextStatus.enabled && nextStatus.connected) await loadCodexModels()
+    else codexModels.value = []
+  } catch (error: any) {
+    if (unmounted) return
+    // A 404 means this is an older WeKnora server, so keep the optional entry
+    // absent. Other failures must remain actionable for a configured owner.
+    if (error?.status === 404) {
+      codexStatus.value = null
+      codexStatusLoadFailed.value = false
+    } else {
+      codexStatusLoadFailed.value = true
+    }
+  } finally {
+    if (!unmounted) codexLoading.value = false
+  }
+}
 
 function stopPolling({ closePopup = false }: { closePopup?: boolean } = {}) {
   if (pollTimer !== null) {
@@ -351,7 +482,24 @@ async function disconnect() {
   }
 }
 
-onMounted(() => { unmounted = false; void load() })
+async function enableCodexModel(slug: string) {
+  selectingCodexSlug.value = slug
+  try {
+    await selectCodexModel(slug)
+    if (unmounted) return
+    enabledCodexModelSlugs.value = new Set([...enabledCodexModelSlugs.value, slug])
+    await chatResources.ensureModels(true)
+    if (unmounted) return
+    MessagePlugin.success(t('codexSettings.modelEnabledSuccess'))
+  } catch (error: any) {
+    if (unmounted) return
+    MessagePlugin.error(error?.message || t('codexSettings.modelEnableFailed'))
+  } finally {
+    if (!unmounted) selectingCodexSlug.value = ''
+  }
+}
+
+onMounted(() => { unmounted = false; void load(); void loadCodex() })
 onUnmounted(() => { unmounted = true; stopPolling({ closePopup: true }) })
 </script>
 
