@@ -21,6 +21,18 @@ export default {
     testStageConfig: '設定の検証', testStageConnect: 'ディレクトリへの接続', testStageTLS: 'TLS 接続', testStageBind: 'ディレクトリ検索アカウントのバインド', testStageSearch: 'ユーザー Base DN の読み取り', testStageReady: '接続検証の完了', testStageFallback: '接続ステージ：{stage}',
     reset: '環境設定を復元', resetConfirm: 'データベースの LDAP 上書きを削除し、環境設定を復元します。続行しますか？', resetSuccess: '環境設定を復元しました', resetFailed: 'LDAP 設定の復元に失敗しました',
   },
+  chatgptSettings: {
+    navLabel: 'ChatGPT', title: 'ChatGPT サブスクリプション', description: 'ご自身の ChatGPT Plus または Pro アカウントを接続し、WeKnora で利用可能なモデルを使用します。',
+    loading: 'ChatGPT 接続を読み込み中...', loadFailed: 'ChatGPT 接続の読み込みに失敗しました',
+    loopbackHint: '認可にはローカルのループバックコールバックを使用します。ブラウザと WeKnora は同じマシンで動作している必要があります。Docker またはリモートサーバーでは、認可前に SSH ポート転送でバックエンドのループバックアドレスへ接続してください。ブラウザからリモートサーバーへ直接コールバックすることはできません。',
+    connectionTitle: '接続', connected: '接続済み', notConnected: '未接続', connectedDescription: 'この個人接続は、あなたが開始したリクエストにのみ使用されます。ユーザーIDを持たないバックグラウンドタスクはサブスクリプションを使用しません。', notConnectedDescription: 'ChatGPT Plus または Pro アカウントを接続して、ご自身用の利用可能なモデルを有効にします。',
+    connectedAccount: '{email} として接続済み', expiresAt: '認可の有効期限：{time}', continueWithChatGPT: 'ChatGPT で続行', popupBlocked: 'ブラウザが認可ウィンドウをブロックしました。ポップアップを許可して再試行してください。', openAuthorizationLink: 'ChatGPT の認可ページを開く',
+    authorizationPending: 'ChatGPT の認可を待機中', authorizationPendingHint: 'ブラウザの認可ウィンドウで完了してください。このページは自動的に更新されます。', authorizationFailed: 'ChatGPT の認可をやり直してください', authorizationFailedHint: '認可が完了しなかったか、期限切れです。「ChatGPT で続行」を選んで再試行してください。', authorizationSucceeded: 'ChatGPT を接続しました', authorizationExpired: '認可リクエストの期限が切れました。もう一度開始してください。', authorizeFailed: 'ChatGPT の認可を開始できませんでした',
+    planUnavailable: 'ChatGPT サブスクリプションを利用できません', planUnavailableHint: '現在の ChatGPT アカウントでは接続済みサブスクリプションを使用できません。プランを確認して再接続してください。',
+    disconnect: '切断', disconnectConfirm: 'この ChatGPT アカウントを WeKnora から切断しますか？すでに WeKnora で有効にしたモデルは削除されません。', disconnected: 'ChatGPT を切断しました', disconnectFailed: 'ChatGPT を切断できませんでした',
+    modelsTitle: '利用可能なモデル', modelsDescription: 'モデルを有効にすると、この個人 ChatGPT 接続用として WeKnora のモデル選択に追加されます。', modelsPending: '利用可能なモデルを確認するには、まず ChatGPT を接続してください。', modelsLoading: '利用可能なモデルを読み込み中...', modelsEmpty: 'このアカウントで利用可能な ChatGPT モデルはありません。', modelsLoadFailed: 'ChatGPT モデルを読み込めませんでした', enableModel: 'WeKnora で有効にする', modelEnabled: '有効', modelEnabledSuccess: 'WeKnora でモデルを有効にしました', modelEnableFailed: 'このモデルを有効にできませんでした',
+    usageTitle: 'この接続の用途', usageHint: 'WeKnora はこのページに ChatGPT パスワードを表示または保存しません。不要になった場合はここで切断するか、ChatGPT でサブスクリプションを管理してください。', welcomeTitle: 'ChatGPT の準備ができました', welcomeDescription: '下でモデルを有効にしてから、WeKnora の既存モデル選択で個人の対話リクエスト用に選択してください。', welcomeConfirm: '了解',
+  },
   modelCatalog: {
     "title": "モデルカタログ",
     "description": "モデルカタログは、モデル追加時に選べるモデル一覧と、コンテキスト長や思考対応などの既定値を定義します。ここでの変更はすべてのワークスペースに即時反映されます。",

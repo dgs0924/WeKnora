@@ -24,6 +24,9 @@ export const SETTINGS_SECTION_MIN_ROLE: Record<string, SettingsRoleKey> = {
   mcp: 'admin',
   system: 'viewer',
   userprofile: 'viewer',
+  // A ChatGPT subscription belongs to the signed-in member. It must not be
+  // hidden behind workspace administration permissions.
+  chatgpt: 'viewer',
   browserconnection: 'viewer',
   tenant: 'viewer',
   members: 'viewer',

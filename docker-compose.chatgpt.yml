@@ -1,0 +1,15 @@
+# Personal fork only: the app image must be built with ChatGPT plan support.
+# Publish the callback only on the Docker host's loopback interface.
+services:
+  app:
+    environment:
+      CHATGPT_AUTH_DIR: /data/chatgpt
+      CHATGPT_CALLBACK_PORT: ${CHATGPT_CALLBACK_PORT:-1455}
+      CHATGPT_CALLBACK_BIND: 0.0.0.0
+    ports:
+      - "127.0.0.1:${CHATGPT_CALLBACK_PORT:-1455}:${CHATGPT_CALLBACK_PORT:-1455}"
+    volumes:
+      - chatgpt_credentials:/data/chatgpt
+
+volumes:
+  chatgpt_credentials:

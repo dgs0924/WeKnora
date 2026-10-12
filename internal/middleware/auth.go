@@ -84,6 +84,12 @@ func isNoAuthAPI(path string, method string) bool {
 // request headers do not resolve a tenant.
 func isTenantOptionalAPI(path, method string) bool {
 	switch {
+	case (path == "/api/v1/chatgpt/status" || path == "/api/v1/chatgpt/models") && method == http.MethodGet:
+		return true
+	case path == "/api/v1/chatgpt/authorize" && method == http.MethodPost:
+		return true
+	case path == "/api/v1/chatgpt/connection" && method == http.MethodDelete:
+		return true
 	case path == "/api/v1/auth/me" && (method == http.MethodGet || method == http.MethodPut):
 		return true
 	case path == "/api/v1/auth/me/preferences" && method == http.MethodPut:

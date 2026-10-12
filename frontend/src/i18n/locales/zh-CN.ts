@@ -22,6 +22,18 @@ export default {
     testStageConfig: '配置校验', testStageConnect: '连接目录服务器', testStageTLS: 'TLS 安全连接', testStageBind: '目录搜索账号绑定', testStageSearch: '读取用户 Base DN', testStageReady: '连接验证完成', testStageFallback: '连接阶段：{stage}',
     reset: '恢复环境变量配置', resetConfirm: '将删除数据库中的 LDAP 覆盖配置，并恢复到环境变量配置。确定继续吗？', resetSuccess: '已恢复环境变量配置', resetFailed: '恢复 LDAP 配置失败',
   },
+  chatgptSettings: {
+    navLabel: 'ChatGPT', title: 'ChatGPT 套餐', description: '绑定您自己的 ChatGPT Plus 或 Pro 账号，在 WeKnora 中使用账号可用的模型。',
+    loading: '正在加载 ChatGPT 绑定状态...', loadFailed: '加载 ChatGPT 绑定状态失败',
+    loopbackHint: '授权使用本机回环地址回调，浏览器与 WeKnora 必须运行在同一台机器。Docker 或远程服务器部署时，请先通过 SSH 将端口转发到后端回环地址；浏览器不能直接回调远程服务器。',
+    connectionTitle: '账号绑定', connected: '已连接', notConnected: '未连接', connectedDescription: '此个人绑定仅用于由您发起的请求。没有您用户身份的后台任务不会使用您的套餐。', notConnectedDescription: '绑定 ChatGPT Plus 或 Pro 账号，为您个人启用可用模型。',
+    connectedAccount: '已连接账号：{email}', expiresAt: '授权到期时间：{time}', continueWithChatGPT: '使用 ChatGPT 继续', popupBlocked: '浏览器拦截了授权窗口，请允许弹出窗口后重试。', openAuthorizationLink: '打开 ChatGPT 授权页面',
+    authorizationPending: '等待 ChatGPT 授权', authorizationPendingHint: '请在浏览器授权窗口中完成操作，此页面会自动更新。', authorizationFailed: '需要重新进行 ChatGPT 授权', authorizationFailedHint: '授权未完成或已过期，请选择“使用 ChatGPT 继续”后重试。', authorizationSucceeded: 'ChatGPT 已连接', authorizationExpired: '授权请求已过期，请重新开始。', authorizeFailed: '无法发起 ChatGPT 授权',
+    planUnavailable: 'ChatGPT 套餐当前不可用', planUnavailableHint: '当前 ChatGPT 账号暂时无法使用已绑定套餐，请检查套餐状态后重新授权。',
+    disconnect: '断开连接', disconnectConfirm: '要断开此 ChatGPT 账号与 WeKnora 的连接吗？已在 WeKnora 启用的模型不会被删除。', disconnected: 'ChatGPT 已断开连接', disconnectFailed: '断开 ChatGPT 连接失败',
+    modelsTitle: '可用模型', modelsDescription: '启用模型后，它会加入 WeKnora 的模型选择器，供此个人 ChatGPT 绑定使用。', modelsPending: '请先绑定 ChatGPT，再查看账号可用的模型。', modelsLoading: '正在加载可用模型...', modelsEmpty: '该账号暂无可用的 ChatGPT 模型。', modelsLoadFailed: '加载 ChatGPT 模型失败', enableModel: '在 WeKnora 中启用', modelEnabled: '已启用', modelEnabledSuccess: '模型已在 WeKnora 中启用', modelEnableFailed: '启用此模型失败',
+    usageTitle: '绑定用途', usageHint: 'WeKnora 不会在此页面显示或保存您的 ChatGPT 密码。不再使用时，可在这里断开连接，或前往 ChatGPT 管理您的套餐。', welcomeTitle: 'ChatGPT 已就绪', welcomeDescription: '请在下方启用模型，然后在 WeKnora 现有模型选择器中选用它处理您个人发起的交互请求。', welcomeConfirm: '知道了',
+  },
   modelCatalog: {
     "title": "模型目录",
     "description": "模型目录决定添加模型时可选的模型列表，以及上下文窗口、是否支持思考等默认参数。在这里修改后，所有空间立即生效。",

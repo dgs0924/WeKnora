@@ -15,6 +15,9 @@ import (
 type Config struct {
 	Endpoint api.Endpoint
 	Settings api.OpenAIResponsesSettings
+	// ChatGPTPlan uses a user-authorized ChatGPT subscription instead of an
+	// API key. That service only accepts ephemeral streaming Responses calls.
+	ChatGPTPlan bool
 	// ThinkingLevels maps neutral levels to the vendor vocabulary.
 	ThinkingLevels api.ThinkingLevelMap
 	// Reasoning marks a reasoning model: sampling parameters are dropped and
@@ -219,10 +222,10 @@ func (c *Client) buildBody(messages []api.Message, opts *api.Options, stream boo
 	if instructions != "" {
 		body["instructions"] = instructions
 	}
-	if stream {
+	if stream || c.cfg.ChatGPTPlan {
 		body["stream"] = true
 	}
-	if s.SupportsStore {
+	if s.SupportsStore || c.cfg.ChatGPTPlan {
 		body["store"] = false
 	}
 

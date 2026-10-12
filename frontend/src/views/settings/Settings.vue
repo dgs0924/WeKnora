@@ -178,6 +178,11 @@
           <UserProfile />
         </div>
 
+        <!-- 个人 ChatGPT 套餐绑定；所有成员各自管理自己的授权。 -->
+        <div v-if="currentSection === 'chatgpt'" class="section">
+          <ChatGPTSettings />
+        </div>
+
         <!-- 空间信息 -->
         <div v-if="currentSection === 'tenant'" class="section">
           <TenantInfo />
@@ -211,6 +216,7 @@ import SettingsModalShell from '@/components/SettingsModalShell.vue'
 import SystemInfo from './SystemInfo.vue'
 import TenantInfo from './TenantInfo.vue'
 import UserProfile from './UserProfile.vue'
+import ChatGPTSettings from './ChatGPTSettings.vue'
 import GeneralSettings from './GeneralSettings.vue'
 import ModelSettings from './ModelSettings.vue'
 import ModelCatalog from '../system/ModelCatalog.vue'
@@ -377,6 +383,7 @@ const navItems = computed(() => {
     { key: 'platform-api-keys', icon: 'secured', label: t('platformApiKeys.title') },
     { key: 'system-audit-log', icon: 'history', label: t('system.globalSettings.audit.tabLabel') },
     { key: 'userprofile', icon: 'user', label: t('userProfile.title') },
+    { key: 'chatgpt', icon: 'chat', label: t('chatgptSettings.navLabel') },
     { key: 'mymemory', icon: 'bookmark', label: t('memorySettings.title') },
     { key: 'envvars', icon: 'key', label: envNavLabel() },
     { key: 'tenant', icon: 'user-circle', label: t('settings.tenantInfo') },
@@ -403,7 +410,7 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'account',
       label: t('settings.navGroups.account'),
-      items: pickItems(['general', 'userprofile', 'mymemory', 'envvars']),
+      items: pickItems(['general', 'userprofile', 'chatgpt', 'mymemory', 'envvars']),
     },
     {
       key: 'workspace',

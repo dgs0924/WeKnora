@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/Tencent/WeKnora/internal/chatgpt"
 	apperrors "github.com/Tencent/WeKnora/internal/errors"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/models/asr"
@@ -27,6 +28,7 @@ var ErrModelNotFound = errors.New("model not found")
 
 // modelService implements the model service interface
 type modelService struct {
+	chatGPT       *chatgpt.Manager
 	repo          interfaces.ModelRepository
 	kbRepo        interfaces.KnowledgeBaseRepository
 	agentRepo     interfaces.CustomAgentRepository
@@ -99,6 +101,9 @@ func (s *modelService) resolveWeKnoraCloudCredentials(ctx context.Context, param
 // For local models, it initiates an asynchronous download process
 // Remote models are immediately set to active status
 func (s *modelService) CreateModel(ctx context.Context, model *types.Model) error {
+	if isChatGPTModel(model) {
+		return apperrors.NewForbiddenError("use personal ChatGPT settings to enable models")
+	}
 	logger.Infof(ctx, "Creating model: %s, type: %s, source: %s", model.Name, model.Type, model.Source)
 
 	// Handle remote models (e.g., OpenAI, Azure)
@@ -168,6 +173,9 @@ func (s *modelService) CopyModel(ctx context.Context, sourceID, displayName stri
 	}
 	if source == nil {
 		return nil, ErrModelNotFound
+	}
+	if isChatGPTModel(source) {
+		return nil, apperrors.NewForbiddenError("ChatGPT models cannot be copied; enable them in personal settings")
 	}
 	if source.IsBuiltin {
 		return nil, apperrors.NewBadRequestError("builtin models cannot be copied")
@@ -273,6 +281,9 @@ func (s *modelService) GetModelByID(ctx context.Context, id string) (*types.Mode
 		return nil, ErrModelNotFound
 	}
 
+	if isChatGPTModel(model) && !ownsChatGPTModel(ctx, model) {
+		return nil, apperrors.NewForbiddenError("ChatGPT model belongs to another account")
+	}
 	logger.Infof(ctx, "Model found, name: %s, status: %s", model.Name, model.Status)
 
 	// Check model status
@@ -310,6 +321,13 @@ func (s *modelService) ListModels(ctx context.Context) ([]*types.Model, error) {
 		return nil, err
 	}
 
+	visible := models[:0]
+	for _, model := range models {
+		if !isChatGPTModel(model) || ownsChatGPTModel(ctx, model) {
+			visible = append(visible, model)
+		}
+	}
+	models = visible
 	logger.Infof(ctx, "Retrieved %d models successfully", len(models))
 	return models, nil
 }
@@ -328,6 +346,12 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 			"model_id": model.ID,
 		})
 		return err
+	}
+	if isChatGPTModel(existingModel) {
+		return apperrors.NewForbiddenError("ChatGPT model references are managed by personal connection settings")
+	}
+	if isChatGPTModel(model) {
+		return apperrors.NewForbiddenError("use personal ChatGPT settings to enable models")
 	}
 	if existingModel != nil && existingModel.IsBuiltin {
 		if !types.IsSystemAdminFromContext(ctx) {
@@ -371,6 +395,9 @@ func (s *modelService) UpdateModelCredentials(
 	if existing == nil {
 		return nil, ErrModelNotFound
 	}
+	if isChatGPTModel(existing) {
+		return nil, apperrors.NewForbiddenError("ChatGPT connections do not accept API credentials")
+	}
 	if existing.IsBuiltin && !types.IsSystemAdminFromContext(ctx) {
 		return nil, apperrors.NewForbiddenError(
 			"only system administrators can modify builtin model credentials")
@@ -408,6 +435,9 @@ func (s *modelService) ClearModelCredential(ctx context.Context, id, field strin
 	}
 	if existing == nil {
 		return ErrModelNotFound
+	}
+	if isChatGPTModel(existing) {
+		return apperrors.NewForbiddenError("ChatGPT connections are managed in personal settings")
 	}
 	if existing.IsBuiltin && !types.IsSystemAdminFromContext(ctx) {
 		return apperrors.NewForbiddenError(
@@ -703,6 +733,15 @@ func (s *modelService) GetChatModel(ctx context.Context, modelId string) (chat.C
 		return nil, ErrModelNotFound
 	}
 
+	if isChatGPTModel(model) {
+		if s.chatGPT == nil {
+			return nil, errors.New("ChatGPT connection is unavailable")
+		}
+		if !ownsChatGPTModel(ctx, model) {
+			return nil, apperrors.NewForbiddenError("ChatGPT model belongs to another account")
+		}
+		return &personalChatGPTChat{accounts: s.chatGPT, owner: model.Parameters.ExtraConfig[chatGPTOwnerKey], name: model.Name, id: model.ID}, nil
+	}
 	logger.Infof(ctx, "Getting chat model: %s, source: %s", model.Name, model.Source)
 
 	appID, appSecret := s.resolveWeKnoraCloudCredentials(ctx, &model.Parameters)

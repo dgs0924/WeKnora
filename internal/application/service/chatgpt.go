@@ -1,0 +1,148 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/google/uuid"
+
+	"github.com/Tencent/WeKnora/internal/chatgpt"
+	apperrors "github.com/Tencent/WeKnora/internal/errors"
+	"github.com/Tencent/WeKnora/internal/models/api"
+	"github.com/Tencent/WeKnora/internal/models/api/openairesponses"
+	"github.com/Tencent/WeKnora/internal/models/chat"
+	"github.com/Tencent/WeKnora/internal/models/embedding"
+	"github.com/Tencent/WeKnora/internal/models/utils/ollama"
+	"github.com/Tencent/WeKnora/internal/types"
+	"github.com/Tencent/WeKnora/internal/types/interfaces"
+)
+
+const chatGPTPlanKey = "chatgpt_plan"
+const chatGPTOwnerKey = "chatgpt_owner"
+
+// ChatGPTUser derives the owner from the authenticated web principal, never
+// from a request parameter or a shared workspace's model configuration.
+func ChatGPTUser(ctx context.Context) (string, error) {
+	uid, ok := types.UserIDFromContext(ctx)
+	p, valid := types.PrincipalFromContext(ctx)
+	_, apiKey := types.AuditAPIKeyFromContext(ctx)
+	if !ok || !valid || apiKey || p.Type != types.PrincipalWebUser || p.ID != uid {
+		return "", apperrors.NewForbiddenError("ChatGPT plan requires an authenticated personal account")
+	}
+	return uid, nil
+}
+
+func isChatGPTModel(m *types.Model) bool {
+	return m != nil && m.Parameters.ExtraConfig[chatGPTPlanKey] == "true"
+}
+
+func ownsChatGPTModel(ctx context.Context, m *types.Model) bool {
+	uid, err := ChatGPTUser(ctx)
+	return err == nil && uid == m.Parameters.ExtraConfig[chatGPTOwnerKey] && !m.IsBuiltin
+}
+
+// NewModelServiceWithChatGPT leaves the existing constructor usable by tests
+// and wires the optional account runtime into the application container.
+func NewModelServiceWithChatGPT(repo interfaces.ModelRepository, kb interfaces.KnowledgeBaseRepository,
+	agents interfaces.CustomAgentRepository, ol *ollama.OllamaService, pool embedding.EmbedderPooler,
+	tenants interfaces.TenantService, accounts *chatgpt.Manager,
+) interfaces.ModelService {
+	s := NewModelService(repo, kb, agents, ol, pool, tenants).(*modelService)
+	s.chatGPT = accounts
+	return s
+}
+
+// EnableChatGPTModel creates a credential-free personal model reference in the
+// active workspace. Only the account's current visible catalog can be selected.
+type chatGPTModelCatalogue interface {
+	Models(context.Context, string) ([]chatgpt.Model, error)
+}
+
+func EnableChatGPTModel(ctx context.Context, accounts chatGPTModelCatalogue, repo interfaces.ModelRepository, slug string) (*types.Model, error) {
+	uid, err := ChatGPTUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	slug = strings.TrimSpace(slug)
+	models, err := accounts.Models(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	label := ""
+	for _, m := range models {
+		if m.Slug == slug {
+			label = m.DisplayName
+			break
+		}
+	}
+	if label == "" {
+		return nil, apperrors.NewBadRequestError("select an available ChatGPT model")
+	}
+	tenantID := types.MustTenantIDFromContext(ctx)
+	id := uuid.NewSHA1(uuid.NameSpaceURL, []byte(fmt.Sprintf("weknora:chatgpt:%d:%s:%s", tenantID, uid, slug))).String()
+	rows, err := repo.List(ctx, tenantID, types.ModelTypeKnowledgeQA, "")
+	if err != nil {
+		return nil, err
+	}
+	for _, m := range rows {
+		if m.ID == id && isChatGPTModel(m) && ownsChatGPTModel(ctx, m) {
+			return m, nil
+		}
+	}
+	m := &types.Model{ID: id, TenantID: tenantID, Name: slug, DisplayName: "ChatGPT · " + label,
+		Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceRemote, Status: types.ModelStatusActive,
+		Description: "Uses the owner's authorized ChatGPT plan for interactive requests", ManagedBy: "chatgpt",
+		Parameters: types.ModelParameters{Provider: "openai", BaseURL: "https://api.openai.com/v1",
+			ExtraConfig: map[string]string{chatGPTPlanKey: "true", chatGPTOwnerKey: uid},
+			Spec:        &types.ModelSpecOverride{API: string(api.APIOpenAIResponses)}},
+	}
+	if err := repo.Create(ctx, m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// personalChatGPTChat resolves a fresh access token at each call, so cached
+// clients cannot bypass sign-out or reuse another member's authorization.
+type chatGPTTokenSource interface {
+	AccessToken(context.Context, string) (string, error)
+}
+
+type personalChatGPTChat struct {
+	accounts        chatGPTTokenSource
+	owner, name, id string
+}
+
+func (c *personalChatGPTChat) GetModelName() string { return c.name }
+func (c *personalChatGPTChat) GetModelID() string   { return c.id }
+func (c *personalChatGPTChat) client(ctx context.Context) (chat.Chat, error) {
+	uid, err := ChatGPTUser(ctx)
+	if err != nil || uid != c.owner {
+		return nil, apperrors.NewForbiddenError("ChatGPT model belongs to another account")
+	}
+	if c.accounts == nil {
+		return nil, fmt.Errorf("ChatGPT connection is unavailable")
+	}
+	token, err := c.accounts.AccessToken(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	return openairesponses.New(openairesponses.Config{ChatGPTPlan: true, Settings: api.DefaultOpenAIResponses(), Reasoning: true, Endpoint: api.Endpoint{
+		BaseURL: "https://api.openai.com/v1", Model: c.name, ModelID: c.id, Auth: api.BearerAuth(token),
+	}}), nil
+}
+func (c *personalChatGPTChat) Chat(ctx context.Context, messages []chat.Message, opts *chat.ChatOptions) (*types.ChatResponse, error) {
+	client, err := c.client(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return client.Chat(ctx, messages, opts)
+}
+func (c *personalChatGPTChat) ChatStream(ctx context.Context, messages []chat.Message, opts *chat.ChatOptions) (<-chan types.StreamResponse, error) {
+	client, err := c.client(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return client.ChatStream(ctx, messages, opts)
+}

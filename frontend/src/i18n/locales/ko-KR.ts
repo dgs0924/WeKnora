@@ -21,6 +21,18 @@ export default {
     testStageConfig: '구성 검증', testStageConnect: '디렉터리 서버 연결', testStageTLS: 'TLS 보안 연결', testStageBind: '디렉터리 검색 계정 바인딩', testStageSearch: '사용자 Base DN 읽기', testStageReady: '연결 검증 완료', testStageFallback: '연결 단계: {stage}',
     reset: '환경 구성 복원', resetConfirm: '데이터베이스 LDAP 재정의를 삭제하고 환경 구성을 복원합니다. 계속하시겠습니까?', resetSuccess: '환경 구성을 복원했습니다', resetFailed: 'LDAP 구성 복원에 실패했습니다',
   },
+  chatgptSettings: {
+    navLabel: 'ChatGPT', title: 'ChatGPT 구독', description: '본인의 ChatGPT Plus 또는 Pro 계정을 연결하여 WeKnora에서 사용 가능한 모델을 사용합니다.',
+    loading: 'ChatGPT 연결을 불러오는 중...', loadFailed: 'ChatGPT 연결을 불러오지 못했습니다',
+    loopbackHint: '인증에는 로컬 루프백 콜백을 사용합니다. 브라우저와 WeKnora는 같은 컴퓨터에서 실행되어야 합니다. Docker 또는 원격 서버에서는 인증 전에 SSH 포트 포워딩으로 백엔드 루프백 주소에 연결하세요. 브라우저는 원격 서버로 직접 콜백할 수 없습니다.',
+    connectionTitle: '연결', connected: '연결됨', notConnected: '연결 안 됨', connectedDescription: '이 개인 연결은 본인이 시작한 요청에만 사용됩니다. 사용자 ID가 없는 백그라운드 작업은 구독을 사용하지 않습니다.', notConnectedDescription: 'ChatGPT Plus 또는 Pro 계정을 연결하여 본인용 사용 가능 모델을 활성화하세요.',
+    connectedAccount: '{email}(으)로 연결됨', expiresAt: '인증 만료: {time}', continueWithChatGPT: 'ChatGPT로 계속', popupBlocked: '브라우저가 인증 창을 차단했습니다. 팝업을 허용한 후 다시 시도하세요.', openAuthorizationLink: 'ChatGPT 인증 페이지 열기',
+    authorizationPending: 'ChatGPT 인증 대기 중', authorizationPendingHint: '브라우저 인증 창에서 완료하세요. 이 페이지는 자동으로 업데이트됩니다.', authorizationFailed: 'ChatGPT 인증을 다시 시작해야 합니다', authorizationFailedHint: '인증을 완료하지 못했거나 만료되었습니다. ChatGPT로 계속을 선택해 다시 시도하세요.', authorizationSucceeded: 'ChatGPT가 연결되었습니다', authorizationExpired: '인증 요청이 만료되었습니다. 다시 시작하세요.', authorizeFailed: 'ChatGPT 인증을 시작하지 못했습니다',
+    planUnavailable: 'ChatGPT 구독을 사용할 수 없습니다', planUnavailableHint: '현재 ChatGPT 계정에서 연결된 구독을 사용할 수 없습니다. 구독을 확인하고 다시 연결하세요.',
+    disconnect: '연결 해제', disconnectConfirm: '이 ChatGPT 계정을 WeKnora에서 연결 해제할까요? WeKnora에서 이미 활성화한 모델은 삭제되지 않습니다.', disconnected: 'ChatGPT 연결이 해제되었습니다', disconnectFailed: 'ChatGPT 연결을 해제하지 못했습니다',
+    modelsTitle: '사용 가능한 모델', modelsDescription: '모델을 활성화하면 이 개인 ChatGPT 연결용 WeKnora 모델 선택기에 추가됩니다.', modelsPending: '사용 가능한 모델을 보려면 먼저 ChatGPT를 연결하세요.', modelsLoading: '사용 가능한 모델을 불러오는 중...', modelsEmpty: '이 계정에서 사용할 수 있는 ChatGPT 모델이 없습니다.', modelsLoadFailed: 'ChatGPT 모델을 불러오지 못했습니다', enableModel: 'WeKnora에서 활성화', modelEnabled: '활성화됨', modelEnabledSuccess: 'WeKnora에서 모델을 활성화했습니다', modelEnableFailed: '이 모델을 활성화하지 못했습니다',
+    usageTitle: '연결 사용 방식', usageHint: 'WeKnora는 이 페이지에 ChatGPT 비밀번호를 표시하거나 저장하지 않습니다. 더 이상 사용하지 않을 경우 여기서 연결을 해제하거나 ChatGPT에서 구독을 관리하세요.', welcomeTitle: 'ChatGPT가 준비되었습니다', welcomeDescription: '아래에서 모델을 활성화한 다음 WeKnora의 기존 모델 선택기에서 개인 대화 요청용으로 선택하세요.', welcomeConfirm: '확인',
+  },
   modelCatalog: {
     "title": "모델 카탈로그",
     "description": "모델 카탈로그는 모델 추가 시 선택할 수 있는 모델 목록과 컨텍스트 창, 추론 지원 여부 같은 기본값을 정의합니다. 여기서 변경하면 모든 워크스페이스에 즉시 적용됩니다.",

@@ -71,6 +71,9 @@ func (c *Client) send(
 func (c *Client) Chat(ctx context.Context, messages []api.Message, opts *api.Options) (*types.ChatResponse, error) {
 	ctx, cancel := api.WithLLMTimeout(ctx, api.DefaultChatTimeout)
 	defer cancel()
+	if c.cfg.ChatGPTPlan {
+		return c.chatViaStream(ctx, messages, opts)
+	}
 
 	resp, _, err := c.send(ctx, messages, opts, false)
 	if err != nil {
@@ -89,6 +92,32 @@ func (c *Client) Chat(ctx context.Context, messages []api.Message, opts *api.Opt
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 	result, err := c.parseResponse(raw)
+	if err != nil {
+		return nil, err
+	}
+	api.LogUsage(ctx, c.cfg.Endpoint.Model, &result.Usage)
+	return result, nil
+}
+
+// chatViaStream turns the mandatory streaming transport used by ChatGPT-plan
+// calls back into a ChatResponse for callers of the non-streaming interface.
+// It deliberately consumes processStream, so tool calls, usage and provider
+// metadata follow exactly the same decoding path as ChatStream.
+func (c *Client) chatViaStream(ctx context.Context, messages []api.Message, opts *api.Options) (*types.ChatResponse, error) {
+	resp, _, err := c.send(ctx, messages, opts, true)
+	if err != nil {
+		if api.IsMultimodalNotSupportedError(err) {
+			logger.Warnf(ctx, "[LLM Request] Model %s does not support multimodal, retrying without images",
+				c.cfg.Endpoint.Model)
+			resp, _, err = c.send(ctx, api.StripImagesFromMessages(messages), opts, true)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("create response stream: %w", err)
+		}
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	result, err := c.collectStream(ctx, resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -130,6 +159,51 @@ func (c *Client) ChatStream(
 		c.processStream(ctx, resp.Body, ch, dumper)
 	}()
 	return ch, nil
+}
+
+// collectStream folds a Responses SSE body into one ChatResponse. It is used
+// for the ChatGPT-plan path, whose service requires stream:true even when the
+// application asked for Chat. Incomplete and error terminal events must be
+// returned as errors: deltas preceding them are only a partial response.
+func (c *Client) collectStream(ctx context.Context, body io.Reader) (*types.ChatResponse, error) {
+	ch := make(chan types.StreamResponse)
+	go func() {
+		defer close(ch)
+		c.processStream(ctx, body, ch, nil)
+	}()
+
+	result := &types.ChatResponse{}
+	var content, reasoning strings.Builder
+	for chunk := range ch {
+		switch chunk.ResponseType {
+		case types.ResponseTypeError:
+			return nil, fmt.Errorf("%s", chunk.Content)
+		case types.ResponseTypeThinking:
+			if !chunk.Done {
+				reasoning.WriteString(chunk.Content)
+			}
+		case types.ResponseTypeAnswer:
+			content.WriteString(chunk.Content)
+			if len(chunk.ToolCalls) > 0 {
+				result.ToolCalls = chunk.ToolCalls
+			}
+			if chunk.Usage != nil {
+				result.Usage = *chunk.Usage
+			}
+			if chunk.FinishReason != "" {
+				result.FinishReason = chunk.FinishReason
+			}
+			if md, ok := chunk.Data["reasoning_metadata"].(types.ProviderMetadata); ok {
+				result.ReasoningMetadata = md
+			}
+		}
+	}
+	if result.FinishReason == "" || result.FinishReason == types.FinishReasonIncomplete {
+		return nil, fmt.Errorf("%s", types.StreamEndedEarlyError)
+	}
+	result.Content = content.String()
+	result.ReasoningContent = reasoning.String()
+	return result, nil
 }
 
 // --- response decoding ---
@@ -344,6 +418,26 @@ type rawStreamEvent struct {
 	Code    any    `json:"code,omitempty"`
 }
 
+func errorCode(code any) string {
+	if code == nil {
+		return ""
+	}
+	if text, ok := code.(string); ok {
+		return text
+	}
+	return fmt.Sprint(code)
+}
+
+func streamErrorMessage(prefix string, code any, message string) string {
+	if code := errorCode(code); code != "" {
+		if message != "" {
+			return fmt.Sprintf("%s: %s: %s", prefix, code, message)
+		}
+		return fmt.Sprintf("%s: %s", prefix, code)
+	}
+	return fmt.Sprintf("%s: %s", prefix, orDefault(message, "unknown error"))
+}
+
 // streamState tracks the function_call items seen so far so argument deltas
 // can be routed to the assembler index that announced the call.
 type streamState struct {
@@ -486,18 +580,47 @@ func (c *Client) processStream(
 					assembler.SetToolCallMetadata(st.indexFor(itemID), toolCallMetadata(item))
 				}
 			}
-		case "response.completed", "response.incomplete":
-			c.completeStream(ch, assembler, st, ev.Response, ev.Type == "response.incomplete")
+		case "response.completed":
+			if ev.Response == nil {
+				assembler.Fail(ch, fmt.Errorf("API stream error: response.completed missing response"))
+				return
+			}
+			if ev.Response.Error != nil || ev.Response.Status == "failed" {
+				var code any
+				var message string
+				if ev.Response.Error != nil {
+					code, message = ev.Response.Error.Code, ev.Response.Error.Message
+				}
+				assembler.Fail(ch, fmt.Errorf("%s", streamErrorMessage("API stream error", code, orDefault(message, "response failed"))))
+				return
+			}
+			if ev.Response.Status == "incomplete" {
+				reason := "response incomplete"
+				if ev.Response.IncompleteDetails != nil && ev.Response.IncompleteDetails.Reason != "" {
+					reason = ev.Response.IncompleteDetails.Reason
+				}
+				assembler.Fail(ch, fmt.Errorf("API stream incomplete: %s", reason))
+				return
+			}
+			c.completeStream(ch, assembler, st, ev.Response)
+			return
+		case "response.incomplete":
+			reason := "response incomplete"
+			if ev.Response != nil && ev.Response.IncompleteDetails != nil && ev.Response.IncompleteDetails.Reason != "" {
+				reason = ev.Response.IncompleteDetails.Reason
+			}
+			assembler.Fail(ch, fmt.Errorf("API stream incomplete: %s", reason))
 			return
 		case "response.failed":
+			var code any
 			msg := "response failed"
-			if ev.Response != nil && ev.Response.Error != nil && ev.Response.Error.Message != "" {
-				msg = ev.Response.Error.Message
+			if ev.Response != nil && ev.Response.Error != nil {
+				code, msg = ev.Response.Error.Code, orDefault(ev.Response.Error.Message, msg)
 			}
-			assembler.Fail(ch, fmt.Errorf("API stream error: %s", msg))
+			assembler.Fail(ch, fmt.Errorf("%s", streamErrorMessage("API stream error", code, msg)))
 			return
 		case "error":
-			assembler.Fail(ch, fmt.Errorf("API stream error: %s", orDefault(ev.Message, "unknown error")))
+			assembler.Fail(ch, fmt.Errorf("%s", streamErrorMessage("API stream error", ev.Code, ev.Message)))
 			return
 		}
 	}
@@ -522,10 +645,10 @@ func streamEventKey(itemID string, outputIndex int) string {
 	return fmt.Sprintf("output_index:%d", outputIndex)
 }
 
-// completeStream handles the terminal response.completed / response.incomplete
-// event: usage, finish reason, reasoning artifacts and the closing chunks.
+// completeStream handles a successful response.completed event: usage, finish
+// reason, reasoning artifacts and the closing chunks.
 func (c *Client) completeStream(
-	ch chan<- types.StreamResponse, assembler *api.StreamAssembler, st *streamState, resp *rawResponse, incomplete bool,
+	ch chan<- types.StreamResponse, assembler *api.StreamAssembler, st *streamState, resp *rawResponse,
 ) {
 	if resp != nil {
 		if resp.Usage != nil {
@@ -545,9 +668,6 @@ func (c *Client) completeStream(
 		}
 	}
 	finishReason := resp.finishReason(assembler.ToolCallCount() > 0)
-	if incomplete && finishReason == "stop" {
-		finishReason = "length"
-	}
 	assembler.Process(ch, api.Delta{FinishReason: finishReason})
 	assembler.ReasoningMetadata = reasoningMetadata(st.reasoningItems)
 	assembler.End(ch)

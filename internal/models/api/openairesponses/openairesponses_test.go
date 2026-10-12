@@ -35,6 +35,13 @@ func newTestClient(t *testing.T, server *httptest.Server, reasoning bool) *Clien
 	})
 }
 
+func newChatGPTPlanTestClient(t *testing.T, server *httptest.Server) *Client {
+	t.Helper()
+	c := newTestClient(t, server, true)
+	c.cfg.ChatGPTPlan = true
+	return c
+}
+
 // roundTrip marshals and re-decodes the body so struct-typed values compare
 // as plain JSON.
 func roundTrip(t *testing.T, body map[string]any) map[string]any {
@@ -207,6 +214,21 @@ func TestBuildRequestBodyOffWithoutMapping(t *testing.T) {
 	}
 }
 
+func TestChatGPTPlanForcesEphemeralStream(t *testing.T) {
+	c := newTestClient(t, nil, false)
+	c.cfg.ChatGPTPlan = true
+	// The plan contract owns these two fields even when a custom endpoint did
+	// not advertise optional Responses features.
+	c.cfg.Settings.SupportsStore = false
+	body, err := c.BuildRequestBody([]api.Message{{Role: "user", Content: "hi"}}, nil, false)
+	if err != nil {
+		t.Fatalf("BuildRequestBody: %v", err)
+	}
+	if body["stream"] != true || body["store"] != false {
+		t.Fatalf("plan body = %#v, want stream:true and store:false", body)
+	}
+}
+
 func TestBuildRequestBodyImagesAndAuto(t *testing.T) {
 	c := newTestClient(t, nil, true)
 	on := true
@@ -348,6 +370,105 @@ func TestChatIncompleteAndError(t *testing.T) {
 	_, err = c.Chat(context.Background(), []api.Message{{Role: "user", Content: "hi"}}, nil)
 	if err == nil || !strings.Contains(err.Error(), "bad model") {
 		t.Fatalf("expected API error, got %v", err)
+	}
+}
+
+func TestChatGPTPlanAggregatesMandatoryStream(t *testing.T) {
+	t.Setenv("SSRF_WHITELIST", "127.0.0.1")
+	body := sseBody(
+		`{"type":"response.reasoning_summary_text.delta","delta":"check facts"}`,
+		`{"type":"response.output_text.delta","delta":"Hello"}`,
+		`{"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":""}}`,
+		`{"type":"response.function_call_arguments.delta","item_id":"fc_1","output_index":1,"delta":"{\"q\":\"hi\"}"}`,
+		`{"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","id":"rs_1","summary":[{"type":"summary_text","text":"check facts"}],"encrypted_content":"enc"}}`,
+		`{"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[],"usage":{"input_tokens":3,"output_tokens":5,"total_tokens":8}}}`,
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if req["stream"] != true || req["store"] != false {
+			t.Fatalf("plan request = %#v, want stream:true and store:false", req)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	resp, err := newChatGPTPlanTestClient(t, server).Chat(
+		context.Background(), []api.Message{{Role: "user", Content: "hi"}}, nil)
+	if err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+	if resp.Content != "Hello" || resp.ReasoningContent != "check facts" || resp.FinishReason != "tool_calls" {
+		t.Fatalf("response = %+v", resp)
+	}
+	if resp.Usage.PromptTokens != 3 || resp.Usage.CompletionTokens != 5 || resp.Usage.TotalTokens != 8 {
+		t.Errorf("usage = %+v", resp.Usage)
+	}
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].ID != "call_1" ||
+		resp.ToolCalls[0].Function.Name != "lookup" || resp.ToolCalls[0].Function.Arguments != `{"q":"hi"}` {
+		t.Errorf("tool calls = %+v", resp.ToolCalls)
+	}
+	var reasoning []map[string]any
+	if err := json.Unmarshal(resp.ReasoningMetadata[metadataReasoningItems], &reasoning); err != nil ||
+		len(reasoning) != 1 || reasoning[0]["encrypted_content"] != "enc" {
+		t.Errorf("reasoning metadata = %v (err %v)", resp.ReasoningMetadata, err)
+	}
+}
+
+func TestChatGPTPlanRejectsTerminalFailuresAndTruncation(t *testing.T) {
+	t.Setenv("SSRF_WHITELIST", "127.0.0.1")
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "subscription limit", body: sseBody(
+				`{"type":"response.output_text.delta","delta":"partial"}`,
+				`{"type":"response.failed","response":{"status":"failed","error":{"code":"subscription_sharing_usage_limit_exceeded","message":"limit reached"}}}`),
+			want: "subscription_sharing_usage_limit_exceeded",
+		},
+		{
+			name: "subscription unavailable", body: sseBody(
+				`{"type":"error","code":"subscription_sharing_unavailable","message":"try again later"}`),
+			want: "subscription_sharing_unavailable",
+		},
+		{
+			name: "incomplete", body: sseBody(
+				`{"type":"response.output_text.delta","delta":"partial"}`,
+				`{"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}}`),
+			want: "API stream incomplete: max_output_tokens",
+		},
+		{
+			name: "eof before completed", body: sseBody(
+				`{"type":"response.output_text.delta","delta":"partial"}`),
+			want: types.StreamEndedEarlyError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var req map[string]any
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					t.Fatalf("decode request: %v", err)
+				}
+				if req["stream"] != true || req["store"] != false {
+					t.Fatalf("plan request = %#v", req)
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer server.Close()
+
+			_, err := newChatGPTPlanTestClient(t, server).Chat(
+				context.Background(), []api.Message{{Role: "user", Content: "hi"}}, nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Chat error = %v, want %q", err, tt.want)
+			}
+		})
 	}
 }
 

@@ -31,6 +31,11 @@ test('personal skill environment variables are visible to every member', () => {
   )
 })
 
+test('personal ChatGPT subscription binding is visible to every member', () => {
+  assert.equal(SETTINGS_SECTION_MIN_ROLE.chatgpt, 'viewer')
+  assert.equal(SYSTEM_ADMIN_SETTINGS_SECTIONS.has('chatgpt'), false)
+})
+
 test('system administration settings stay explicitly system-admin-only', () => {
   assert.deepEqual(
     [...SYSTEM_ADMIN_SETTINGS_SECTIONS],

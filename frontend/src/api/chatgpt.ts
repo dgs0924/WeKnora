@@ -1,0 +1,74 @@
+import { del, get, post } from '@/utils/request'
+
+/**
+ * A personal ChatGPT subscription connection. The API deliberately exposes
+ * account metadata only; OAuth tokens and authorization codes never leave the
+ * backend.
+ */
+export interface ChatGPTConnectionStatus {
+  connected: boolean
+  email?: string
+  expires_at?: string
+  plan_enabled?: boolean
+  pending?: {
+    attempt_id: string
+    status: string
+    error?: string
+  }
+  loopback_required: boolean
+}
+
+export interface ChatGPTAuthorization {
+  authorization_url: string
+  attempt_id: string
+  expires_at?: string
+}
+
+export interface ChatGPTModel {
+  slug: string
+  display_name: string
+  /** The corresponding WeKnora model ID, once this model has been enabled. */
+  id?: string
+}
+
+export interface ChatGPTModelsResponse {
+  models: ChatGPTModel[]
+}
+
+export interface ChatGPTModelSelection {
+  model_id?: string
+  id?: string
+}
+
+const endpoint = '/api/v1/chatgpt'
+
+/** Accept both the new direct payload and the legacy `{ data }` API envelope. */
+function payload<T>(response: T | { data?: T }): T {
+  if (response && typeof response === 'object' && 'data' in response && response.data !== undefined) {
+    return response.data
+  }
+  return response as T
+}
+
+export async function getChatGPTStatus(): Promise<ChatGPTConnectionStatus> {
+  return payload<ChatGPTConnectionStatus>(await get(`${endpoint}/status`) as unknown as ChatGPTConnectionStatus)
+}
+
+export async function authorizeChatGPT(): Promise<ChatGPTAuthorization> {
+  return payload<ChatGPTAuthorization>(await post(`${endpoint}/authorize`) as unknown as ChatGPTAuthorization)
+}
+
+export async function listChatGPTModels(): Promise<ChatGPTModel[]> {
+  const response = payload<ChatGPTModelsResponse>(await get(`${endpoint}/models`) as unknown as ChatGPTModelsResponse)
+  return Array.isArray(response.models) ? response.models : []
+}
+
+export async function selectChatGPTModel(slug: string): Promise<ChatGPTModelSelection> {
+  return payload<ChatGPTModelSelection>(
+    await post(`${endpoint}/models/select`, { slug }) as unknown as ChatGPTModelSelection,
+  )
+}
+
+export async function disconnectChatGPT(): Promise<void> {
+  await del(`${endpoint}/connection`)
+}
