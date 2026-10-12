@@ -21,6 +21,8 @@ var versionedSQLiteTables = []string{
 	"task_pending_ops",
 	"task_dead_letters",
 	"system_settings",
+	"model_catalog_configs",
+	"chunk_images",
 	"knowledge_processing_spans",
 	"knowledge_tag_relations",
 	"browser_devices",
@@ -28,6 +30,7 @@ var versionedSQLiteTables = []string{
 	"browser_task_interruptions",
 	"fork_snapshot_leases",
 	"mcp_endpoints",
+	"mcp_metadata",
 	"message_artifacts",
 	"tenant_skills",
 	"tenant_skill_snapshots",
@@ -38,13 +41,14 @@ var versionedSQLiteTables = []string{
 // versionedSQLiteColumns maps each existing table to the columns that the
 // versioned migrations add and the SQLite baseline was missing.
 var versionedSQLiteColumns = map[string][]string{
-	"memory_subjects": {"extraction_state"},                                                 // 000094
-	"memory_items":    {"replaces_id"},                                                      // 000094
-	"tenants":         {"api_principal_config"},                                             // 000064
-	"users":           {"is_system_admin", "ldap_subject"},                                  // 000053, 000030
-	"knowledges":      {"pending_subtasks_count", "profile"},                                // 000056, 000101
-	"knowledge_bases": {"profile_config", "generated_profile"},                              // 000101
-	"messages":        {"attachments", "usage", "sandbox_checkpoint", "context_checkpoint"}, // 000034/085/097/105
+	"model_catalog_configs": {"version", "overlay", "history", "updated_by", "updated_at"},        // 000031
+	"memory_subjects":       {"extraction_state"},                                                 // 000094
+	"memory_items":          {"replaces_id"},                                                      // 000094
+	"tenants":               {"api_principal_config"},                                             // 000064
+	"users":                 {"is_system_admin", "ldap_subject"},                                  // 000053, 000030
+	"knowledges":            {"pending_subtasks_count", "profile"},                                // 000056, 000101
+	"knowledge_bases":       {"profile_config", "generated_profile"},                              // 000101
+	"messages":              {"attachments", "usage", "sandbox_checkpoint", "context_checkpoint"}, // 000034/085/097/105
 	"sessions": {
 		"parent_session_id", "forked_from_message_id", "fork_bootstrap", // 000097
 		"sandbox_config_tenant_id", // 000027
@@ -52,8 +56,11 @@ var versionedSQLiteColumns = map[string][]string{
 	},
 	"tenant_invitations": {"token", "accepted_count"},        // 000054
 	"embed_channels":     {"allow_memory"},                   // 000060
+	"im_channels":        {"locale"},                         // 000035
+	"chunks":             {"source_locators"},                // 000033
 	"mcp_oauth_tokens":   {"principal_type", "principal_id"}, // 000064
 	"mcp_tool_approvals": {"enabled"},                        // 000091
+	"mcp_services":       {"usage_instructions"},             // 000092
 	"message_artifacts":  {"deleted_at"},                     // 000107
 	"tenant_skills": {
 		"envs", "served", "catalog_id", "install_session_id", "install_message_id",
@@ -64,7 +71,7 @@ var versionedSQLiteColumns = map[string][]string{
 	}, // 000028
 }
 
-const expectedSQLiteMigrationVersion = 30
+const expectedSQLiteMigrationVersion = 35
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)
@@ -96,6 +103,13 @@ func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	require.True(t, sqliteIndexExists(t, db, "idx_messages_session_created_id"),
 		"SQLite migrations must add the session/created_at index") // 000106
 	assertSQLiteAgentHistoryQueriesUseTheIndex(t, db)
+
+	var catalogVersion int
+	var catalogOverlay string
+	catalogRow := db.QueryRow("SELECT version, overlay FROM model_catalog_configs WHERE id = 1")
+	require.NoError(t, catalogRow.Scan(&catalogVersion, &catalogOverlay))
+	require.Zero(t, catalogVersion)
+	require.JSONEq(t, `{"providers":{}}`, catalogOverlay)
 
 	assertSQLiteShareLinkInvitationsWork(t, db)
 	assertSQLiteMCPOAuthPrincipalUpsertWorks(t, db)
@@ -199,6 +213,49 @@ func TestSQLiteMigrationsUpgradeV16AddsSessionForkColumns(t *testing.T) {
 		)
 	}
 	require.True(t, sqliteColumnExists(t, db, "messages", "sandbox_checkpoint"))
+}
+
+func TestSQLiteMigrationsUpgradeLDAPV30AddsIMChannelLocale(t *testing.T) {
+	repoRoot := sqliteRepoRoot(t)
+
+	// The personal fork originally published LDAP as migration 000030. Build
+	// that exact database state before switching to the merged migration set:
+	// the recorded version is 30, users.ldap_subject exists, and the upstream
+	// im_channels.locale migration has not run yet.
+	legacyRoot := copySQLiteMigrationsThrough(t, repoRoot, 30)
+	chdirAndRestore(t, legacyRoot)
+
+	dbPath := filepath.Join(t.TempDir(), "upgrade-ldap-v30.db")
+	require.NoError(t, RunMigrationsWithOptions("sqlite3://unused", MigrationOptions{SQLiteDBPath: dbPath}))
+
+	db := openSQLiteDB(t, dbPath)
+	versionBefore, dirtyBefore := sqliteMigrationState(t, db)
+	require.Equal(t, 30, versionBefore)
+	require.False(t, dirtyBefore)
+	require.True(t, sqliteColumnExists(t, db, "users", "ldap_subject"))
+	require.False(t, sqliteColumnExists(t, db, "im_channels", "locale"))
+
+	_, err := db.Exec(
+		"INSERT INTO users (id, username, email, password_hash, ldap_subject) VALUES (?, ?, ?, ?, ?)",
+		"ldap-user-1", "ldap-user", "ldap@example.test", "!", "directory-user-1",
+	)
+	require.NoError(t, err)
+
+	chdirAndRestore(t, repoRoot)
+	require.NoError(t, RunMigrationsWithOptions("sqlite3://unused", MigrationOptions{SQLiteDBPath: dbPath}))
+
+	db = openSQLiteDB(t, dbPath)
+	versionAfter, dirtyAfter := sqliteMigrationState(t, db)
+	require.Equal(t, expectedSQLiteMigrationVersion, versionAfter)
+	require.False(t, dirtyAfter)
+	require.True(t, sqliteColumnExists(t, db, "users", "ldap_subject"))
+	require.True(t, sqliteColumnExists(t, db, "im_channels", "locale"))
+
+	var ldapSubject string
+	require.NoError(t, db.QueryRow(
+		"SELECT ldap_subject FROM users WHERE id = ?", "ldap-user-1",
+	).Scan(&ldapSubject))
+	require.Equal(t, "directory-user-1", ldapSubject)
 }
 
 func sqliteRepoRoot(t *testing.T) string {
