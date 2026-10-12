@@ -91,6 +91,8 @@ export interface CodexModel {
   id?: string
 }
 
+export interface CodexModelSelection { model_id?: string }
+
 interface CodexModelsResponse {
   models: CodexModel[]
 }
@@ -117,8 +119,8 @@ export async function listCodexModels(): Promise<CodexModel[]> {
   return Array.isArray(response.models) ? response.models : []
 }
 
-export async function selectCodexModel(slug: string): Promise<void> {
-  await post(`${endpoint}/models/select`, { slug })
+export async function selectCodexModel(slug: string): Promise<CodexModelSelection> {
+  return payload<CodexModelSelection>(await post(`${endpoint}/models/select`, { slug }) as unknown as CodexModelSelection)
 }
 
 /** Lists grants owned by the signed-in server Codex account. */

@@ -5190,6 +5190,7 @@ export default {
         modelHint: 'このアカウントで認可されたモデルのみ選択できます。', modelRequired: '現在の ChatGPT アカウントで利用可能なモデルを選択してください。',
         unsupportedModelType: 'ChatGPT プランは対話とビジョンモデルのみ対応しています。',
       },
+      codexCli: { sourceLabel: 'アカウント認可', title: 'アカウント認可モデル', channelLabel: '認可チャネル', channelChatGPTServer: 'ChatGPT（サーバーアカウント）', hint: 'サーバーでログイン済みのアカウントの対話モデルを使います。', existingHint: 'このモデルはサーバーアカウントにより管理されています。', existingReadonly: '有効なサーバーモデルはここで編集できません。', unavailable: 'サーバーアカウントは現在利用できません。', loadFailed: 'サーバーモデルカタログを読み込めませんでした。', empty: '利用可能なモデルはありません。', modelPlaceholder: 'サーバーモデルを選択', modelHint: '現在は ChatGPT（サーバーアカウント）の対話モデルのみ対応します。', modelRequired: 'サーバーアカウントで利用可能なモデルを選択してください。', unsupportedModelType: 'アカウント認可は対話モデルのみ対応します。' },
     },
     builtinTag: '組み込み'
   },

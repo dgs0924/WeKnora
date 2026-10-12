@@ -21,6 +21,9 @@ function fixture(id: string | undefined = 'owned-model') {
       if (path === '../chatgpt') return {
         selectChatGPTModel: async (slug: string, type: string) => { calls.push(['enable', slug, type]); return { model_id: id } },
       }
+      if (path === '../codex') return {
+        selectCodexModel: async (slug: string) => { calls.push(['enable-codex', slug]); return { model_id: id } },
+      }
       if (path === '../../utils/request') return {
         get: async (url: string) => { calls.push(['get', url]); return { success: true, data: model } },
         post: async (url: string, body: unknown) => { calls.push(['post', url, body]); return { success: true, data: model } },
@@ -69,4 +72,19 @@ test('ordinary OpenAI API models retain the existing creation path', async () =>
   const input = { source: 'remote', type: 'KnowledgeQA', name: 'model', parameters: { provider: 'openai' } }
   assert.equal(await f.create(input), f.model)
   assert.deepEqual(f.calls, [['post', '/api/v1/models', input]])
+})
+
+test('server account model creation enables only the selected Codex model and never posts credentials', async () => {
+  const f = fixture()
+  const result = await f.create({ source: 'remote', type: 'KnowledgeQA', name: ' server-model ', parameters: {
+    provider: 'codex_cli', api_key: 'must-not-send', base_url: 'https://untrusted.example',
+  } })
+  assert.equal(result, f.model)
+  assert.deepEqual(f.calls, [['enable-codex', 'server-model'], ['get', '/api/v1/models/owned-model']])
+})
+
+test('server account creation rejects non-conversation model types before requesting the catalog', async () => {
+  const f = fixture()
+  await assert.rejects(f.create({ source: 'remote', type: 'VLLM', name: 'model', parameters: { provider: 'codex_cli' } }))
+  assert.equal(f.calls.length, 0)
 })

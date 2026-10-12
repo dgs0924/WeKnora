@@ -5201,6 +5201,7 @@ export default {
         modelHint: 'Only models authorized for this account can be selected.', modelRequired: 'Select a model available to the current ChatGPT account.',
         unsupportedModelType: 'The ChatGPT plan supports chat and vision models only.',
       },
+      codexCli: { sourceLabel: 'Account authorization', title: 'Account-authorized models', channelLabel: 'Authorization channel', channelChatGPTServer: 'ChatGPT (server account)', hint: 'Use conversation models from the account signed in on this server. No API key or base URL is needed.', existingHint: 'This model is managed by the server account.', existingReadonly: 'Enabled server models cannot be edited here.', unavailable: 'The server account is unavailable, so its model catalog cannot be read.', loadFailed: 'Could not load the server model catalog.', empty: 'The server account has no available models.', modelPlaceholder: 'Choose a server model', modelHint: 'Currently only ChatGPT (server account) conversation models are supported.', modelRequired: 'Choose a model available to the server account.', unsupportedModelType: 'Account authorization currently supports conversation models only.' },
     },
     builtinTag: 'Built-in'
   },

@@ -1,6 +1,7 @@
 import { get, post, postUpload, put, del } from '../../utils/request';
 import i18n from '@/i18n'
 import { selectChatGPTModel } from '../chatgpt'
+import { selectCodexModel } from '../codex'
 import { ModelInUseError, modelInUseErrorFromRequest } from './modelUsage'
 
 export * from './modelUsage'
@@ -127,6 +128,16 @@ export function createModel(data: ModelConfig): Promise<ModelConfig> {
       return Promise.reject(new Error(t('error.model.createFailed')))
     }
     return selectChatGPTModel(data.name.trim(), data.type).then((result) => {
+      if (!result.model_id) throw new Error(t('error.model.createFailed'))
+      return getModel(result.model_id)
+    })
+  }
+
+  if (data.parameters.provider === 'codex_cli') {
+    if (data.source !== 'remote' || data.type !== 'KnowledgeQA' || !data.name.trim()) {
+      return Promise.reject(new Error(t('error.model.createFailed')))
+    }
+    return selectCodexModel(data.name.trim()).then((result) => {
       if (!result.model_id) throw new Error(t('error.model.createFailed'))
       return getModel(result.model_id)
     })

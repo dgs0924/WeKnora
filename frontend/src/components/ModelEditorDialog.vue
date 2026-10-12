@@ -3,10 +3,10 @@
     :description="getModalDescription()" :icon="modelTypeIcon" :confirm-loading="saving" :cancel-disabled="saving"
     :confirm-text="$t('model.editor.saveAndClose')"
     :close-on-overlay-click="!saving" :close-on-esc-keydown="!saving"
-    :confirm-disabled="isChatGPTPlanExisting || (formData.provider === 'weknoracloud' && wkcCredentialState !== 'configured')"
+    :confirm-disabled="isChatGPTPlanExisting || isCodexExisting || (formData.provider === 'weknoracloud' && wkcCredentialState !== 'configured')"
     @update:visible="(v: boolean) => dialogVisible = v" @confirm="handleConfirm" @cancel="handleCancel">
 
-    <template v-if="formData.source === 'remote' && !isChatGPTPlanEditor" #footer-left>
+    <template v-if="formData.source === 'remote' && !isChatGPTPlanEditor && !isCodexEditor" #footer-left>
       <t-button variant="outline" @click="checkRemoteAPI" :loading="checking"
         :disabled="saving || !formData.modelName || (!formData.baseUrl && formData.provider !== 'weknoracloud') || (formData.provider === 'weknoracloud' && wkcCredentialState !== 'configured')">
         <template #icon>
@@ -27,7 +27,7 @@
         <strong>{{ $t('modelSettings.toasts.saveFailed') }}</strong>
         <div class="connection-result__details" tabindex="0">{{ saveError }}</div>
       </div>
-      <div v-if="formData.source === 'remote' && !isChatGPTPlanEditor" class="connection-feedback" aria-live="polite">
+      <div v-if="formData.source === 'remote' && !isChatGPTPlanEditor && !isCodexEditor" class="connection-feedback" aria-live="polite">
         <p class="connection-hint">{{ $t(isEdit ? 'model.editor.testDraftEditHint' : 'model.editor.testDraftHint') }}</p>
         <p v-if="remoteStale" class="connection-hint">{{ $t('model.editor.testStale') }}</p>
         <div v-if="remoteChecked && !remoteAvailable" class="connection-result error">
@@ -77,12 +77,12 @@
           <div class="source-options" role="radiogroup" :aria-label="$t('model.editor.sourceLabel')">
             <button
               type="button"
-              class="source-option"
-              :class="{ 'is-active': formData.source === 'remote' }"
-              :disabled="isChatGPTPlanExisting"
+              class="source-option source-option--api"
+              :class="{ 'is-active': formData.source === 'remote' && !isCodexEditor }"
+              :disabled="isChatGPTPlanExisting || isCodexExisting"
               role="radio"
-              :aria-checked="formData.source === 'remote'"
-              @click="formData.source = 'remote'"
+              :aria-checked="formData.source === 'remote' && !isCodexEditor"
+              @click="selectRemoteSource"
             >
               <t-icon name="cloud" class="source-option__icon" />
               <span class="source-option__label">{{ $t('model.editor.sourceRemote') }}</span>
@@ -90,17 +90,31 @@
             <button
               v-if="activeModelType !== 'rerank'"
               type="button"
-              class="source-option"
+              class="source-option source-option--ollama"
               :class="{ 'is-active': formData.source === 'local', 'is-disabled': ollamaServiceStatus === false }"
-              :disabled="isChatGPTPlanExisting || ollamaServiceStatus === false"
+              :disabled="isChatGPTPlanExisting || isCodexExisting || ollamaServiceStatus === false"
               role="radio"
               :aria-checked="formData.source === 'local'"
-              @click="formData.source = 'local'"
+              @click="selectLocalSource"
             >
               <t-icon name="server" class="source-option__icon" />
               <span class="source-option__label">{{ $t('model.editor.sourceLocal') }}</span>
             </button>
+            <button
+              type="button"
+              class="source-option source-option--account"
+              :class="{ 'is-active': isCodexEditor }"
+              :disabled="isChatGPTPlanExisting || isCodexExisting || activeModelType !== 'chat'"
+              role="radio"
+              :aria-checked="isCodexEditor"
+              @click="selectCodexSource"
+            >
+              <t-icon name="server" class="source-option__icon" />
+              <span class="source-option__label">{{ $t('model.editor.codexCli.sourceLabel') }}</span>
+            </button>
           </div>
+
+          <p v-if="activeModelType !== 'chat'" class="form-desc">{{ $t('model.editor.codexCli.unsupportedModelType') }}</p>
 
           <!-- Ollama不可用时的提示信息 -->
           <div v-if="shouldShowOllamaUnavailableTip(formData.source, activeModelType, ollamaServiceStatus)"
@@ -273,6 +287,44 @@
                 </t-button>
               </div>
               <p class="form-desc">{{ $t('model.editor.chatgptPlan.modelHint') }}</p>
+            </div>
+          </template>
+        </section>
+
+        <section v-else-if="isCodexEditor" class="setting-drawer__section">
+          <h4 class="setting-drawer__section-title">{{ $t('model.editor.sectionProvider') }}</h4>
+          <div class="form-item">
+            <label class="form-label">{{ $t('model.editor.codexCli.channelLabel') }}</label>
+            <t-select v-model="codexAuthorizationChannel" disabled>
+              <t-option value="chatgpt_server" :label="$t('model.editor.codexCli.channelChatGPTServer')" />
+            </t-select>
+          </div>
+          <div class="chatgpt-plan-hint">
+            <t-icon name="server" class="chatgpt-plan-hint__icon" />
+            <div>
+              <strong>{{ $t('model.editor.codexCli.title') }}</strong>
+              <p>{{ isCodexExisting ? $t('model.editor.codexCli.existingHint') : $t('model.editor.codexCli.hint') }}</p>
+            </div>
+          </div>
+          <template v-if="isCodexExisting">
+            <div class="form-item"><label class="form-label">{{ $t('model.modelName') }}</label><t-input :value="formData.modelName" disabled /></div>
+            <p class="form-desc">{{ $t('model.editor.codexCli.existingReadonly') }}</p>
+          </template>
+          <template v-else>
+            <div v-if="codexState === 'unavailable' || codexState === 'error'" class="chatgpt-plan-message chatgpt-plan-message--warn">
+              <t-icon name="error-circle-filled" />
+              <div><span>{{ codexState === 'unavailable' ? $t('model.editor.codexCli.unavailable') : $t('model.editor.codexCli.loadFailed') }}</span><t-button variant="text" size="small" @click="loadCodexModelsForEditor">{{ $t('model.editor.chatgptPlan.retry') }}</t-button></div>
+            </div>
+            <div v-else-if="codexState === 'empty'" class="chatgpt-plan-message"><t-icon name="info-circle-filled" /><span>{{ $t('model.editor.codexCli.empty') }}</span></div>
+            <div class="form-item">
+              <label class="form-label required">{{ $t('model.modelName') }}</label>
+              <div class="model-select-row">
+                <t-select v-model="formData.modelName" filterable clearable :loading="codexState === 'loading'" :disabled="codexState !== 'ready'" :placeholder="$t('model.editor.codexCli.modelPlaceholder')">
+                  <t-option v-for="model in codexModelsForEditor" :key="model.slug" :value="model.slug" :label="model.display_name || model.slug" />
+                </t-select>
+                <t-button variant="text" size="small" :loading="codexState === 'loading'" @click="loadCodexModelsForEditor" class="refresh-btn"><t-icon name="refresh" />{{ $t('model.editor.chatgptPlan.refresh') }}</t-button>
+              </div>
+              <p class="form-desc">{{ $t('model.editor.codexCli.modelHint') }}</p>
             </div>
           </template>
         </section>
@@ -583,7 +635,7 @@
       </template>
 
       <!-- Section 3 — 高级选项（仅在有内容时渲染，避免空 section 出现底部分隔线） -->
-      <section v-if="!isChatGPTPlanEditor && (['embedding', 'chat', 'vllm'].includes(activeModelType) || formData.source === 'remote')" class="setting-drawer__section">
+      <section v-if="!isChatGPTPlanEditor && !isCodexEditor && (['embedding', 'chat', 'vllm'].includes(activeModelType) || formData.source === 'remote')" class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ $t('model.editor.sectionAdvanced') }}</h4>
 
         <!-- Embedding 专用：维度 -->
@@ -769,6 +821,7 @@ import { shouldShowOllamaUnavailableTip } from '@/components/modelEditorSourceSt
 import { WEKNORA_CLOUD_PROVIDER, WKC_MODEL_KINDS, WKC_MODEL_NAME_BY_KIND } from '@/utils/weknoraCloudModels'
 import { docsUrl } from '@/utils/docsUrl'
 import { getChatGPTStatus, listChatGPTModels, type ChatGPTModel, type ChatGPTPlanModelType } from '@/api/chatgpt'
+import { getCodexStatus, listCodexModels, type CodexModel } from '@/api/codex'
 
 interface CustomHeaderItem {
   key: string
@@ -837,6 +890,7 @@ const RESERVED_EXTRA_CONFIG_KEYS = new Set(['thinking_control'])
 type EditorModelType = 'chat' | 'embedding' | 'rerank' | 'vllm' | 'asr'
 
 const CHATGPT_PLAN_PROVIDER = 'chatgpt_plan'
+const CODEX_CLI_PROVIDER = 'codex_cli'
 // The parent model-save path still validates a remote URL before dispatching
 // the dedicated ChatGPT subscription branch. It is never sent to OpenAI by
 // that branch, but retaining a valid fixed value keeps this editor compatible
@@ -873,9 +927,15 @@ const isEdit = computed(() => !!props.modelData)
 const isChatGPTPlanExisting = computed(() =>
   isEdit.value && props.modelData?.extraConfig?.chatgpt_plan === 'true',
 )
+const isCodexExisting = computed(() =>
+  isEdit.value && props.modelData?.extraConfig?.codex_plan === 'true',
+)
 
 const isChatGPTPlanEditor = computed(() =>
   isChatGPTPlanExisting.value || (!isEdit.value && formData.value.provider === CHATGPT_PLAN_PROVIDER),
+)
+const isCodexEditor = computed(() =>
+  isCodexExisting.value || (!isEdit.value && formData.value.provider === CODEX_CLI_PROVIDER),
 )
 
 const activeModelType = computed(() => (
@@ -1506,6 +1566,41 @@ const loadChatGPTPlanModels = async () => {
   }
 }
 
+type CodexEditorState = 'idle' | 'loading' | 'unavailable' | 'error' | 'empty' | 'ready'
+const codexState = ref<CodexEditorState>('idle')
+const codexModelsForEditor = ref<CodexModel[]>([])
+const codexAuthorizationChannel = ref('chatgpt_server')
+let codexEditorRequestRevision = 0
+
+const invalidateCodexEditorLoad = () => {
+  codexEditorRequestRevision++
+  if (codexState.value === 'loading') codexState.value = 'idle'
+}
+
+const isCurrentCodexEditorRequest = (revision: number) => (
+  revision === codexEditorRequestRevision && props.visible && !isEdit.value
+  && activeModelType.value === 'chat' && formData.value.source === 'remote'
+  && formData.value.provider === CODEX_CLI_PROVIDER
+)
+
+const loadCodexModelsForEditor = async () => {
+  if (isCodexExisting.value || !isCodexEditor.value) return
+  const revision = ++codexEditorRequestRevision
+  codexState.value = 'loading'
+  codexModelsForEditor.value = []
+  try {
+    const status = await getCodexStatus()
+    if (!isCurrentCodexEditorRequest(revision)) return
+    if (!status.enabled || !status.connected) { codexState.value = 'unavailable'; return }
+    const models = await listCodexModels()
+    if (!isCurrentCodexEditorRequest(revision)) return
+    codexModelsForEditor.value = models.filter(model => !!model?.slug)
+    codexState.value = codexModelsForEditor.value.length ? 'ready' : 'empty'
+  } catch {
+    if (isCurrentCodexEditorRequest(revision)) codexState.value = 'error'
+  }
+}
+
 const goToChatGPTSettings = async () => {
   emit('update:visible', false)
   if (uiStore.showSettingsModal) {
@@ -1770,8 +1865,12 @@ watch(() => props.visible, (val) => {
     if (!isEdit.value && formData.value.provider === CHATGPT_PLAN_PROVIDER) {
       void loadChatGPTPlanModels()
     }
+    if (!isEdit.value && formData.value.provider === CODEX_CLI_PROVIDER) {
+      void loadCodexModelsForEditor()
+    }
   } else {
     invalidateChatGPTPlanLoad()
+    invalidateCodexEditorLoad()
   }
 })
 
@@ -1798,7 +1897,9 @@ watch(() => props.visible, () => {
 // 重置表单
 const resetForm = () => {
   invalidateChatGPTPlanLoad()
+  invalidateCodexEditorLoad()
   chatGPTPlanModels.value = []
+  codexModelsForEditor.value = []
   legacyThinkingControlLoaded.value = false
   formData.value = {
     id: generateId(),
@@ -1900,6 +2001,7 @@ const handleProviderChange = (value: string) => {
   formData.value.provider = value
   const provider = providerOptions.value.find(opt => opt.value === value)
   if (value !== CHATGPT_PLAN_PROVIDER) invalidateChatGPTPlanLoad()
+  if (value !== CODEX_CLI_PROVIDER) invalidateCodexEditorLoad()
   // Older catalogs omit inherited type URLs. Mirror GetDefaultURL's chat
   // fallback, preserving an explicitly empty URL and never the previous vendor's.
   formData.value.baseUrl = provider?.defaultUrls?.[activeModelType.value]
@@ -1924,12 +2026,57 @@ const handleProviderChange = (value: string) => {
     void loadChatGPTPlanModels()
     return
   }
+  if (value === CODEX_CLI_PROVIDER) {
+    formData.value.baseUrl = CHATGPT_PLAN_BASE_URL
+    formData.value.modelName = ''
+    formData.value.apiKey = ''
+    formData.value.appSecret = ''
+    formData.value.customHeaders = []
+    formData.value.extraConfig = {}
+    void loadCodexModelsForEditor()
+    return
+  }
   if (hydratingForm.value) return
   resetModelSelectionForVendor()
   // 换厂商：丢掉上一家的厂商字段（保留协议 / 远端模型名等高级覆盖），再灌入新厂商默认值
   formData.value.extraConfig = keepVendorNeutralExtraConfig()
   formData.value.appSecret = ''
   applyExtraFieldDefaults()
+}
+
+const selectCodexSource = () => {
+  if (activeModelType.value !== 'chat') {
+    MessagePlugin.warning(t('model.editor.codexCli.unsupportedModelType'))
+    return
+  }
+  formData.value.source = 'remote'
+  handleProviderChange(CODEX_CLI_PROVIDER)
+}
+
+const selectRemoteSource = () => {
+  if (!isCodexEditor.value) { formData.value.source = 'remote'; return }
+  invalidateCodexEditorLoad()
+  codexModelsForEditor.value = []
+  formData.value.modelName = ''
+  formData.value.apiKey = ''
+  formData.value.appSecret = ''
+  formData.value.customHeaders = []
+  formData.value.extraConfig = {}
+  formData.value.source = 'remote'
+  handleProviderChange('generic')
+}
+
+const selectLocalSource = () => {
+  if (formData.value.source === 'local') return
+  invalidateCodexEditorLoad()
+  codexModelsForEditor.value = []
+  formData.value.source = 'local'
+  formData.value.provider = 'generic'
+  formData.value.modelName = ''
+  formData.value.apiKey = ''
+  formData.value.appSecret = ''
+  formData.value.customHeaders = []
+  formData.value.extraConfig = {}
 }
 
 // 监听来源变化，重置校验状态（已合并到下面的 watch）
@@ -2239,7 +2386,7 @@ const checkRemoteAPI = async () => {
 
 // 确认保存
 const handleConfirm = async () => {
-  if (saving.value || isChatGPTPlanExisting.value) return
+  if (saving.value || isChatGPTPlanExisting.value || isCodexExisting.value) return
   saving.value = true
   if (checking.value) invalidateConnectionTest()
   saveError.value = ''
@@ -2277,6 +2424,10 @@ const handleConfirm = async () => {
         MessagePlugin.warning(t('model.editor.chatgptPlan.modelRequired'))
         return
       }
+    }
+    if (isCodexEditor.value && !codexModelsForEditor.value.some(model => model.slug === formData.value.modelName)) {
+      MessagePlugin.warning(t('model.editor.codexCli.modelRequired'))
+      return
     }
 
     if (formData.value.source === 'remote' && formData.value.provider !== 'weknoracloud') {

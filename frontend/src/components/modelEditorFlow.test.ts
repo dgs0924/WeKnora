@@ -30,6 +30,7 @@ async function fixture(options: {
   type?: string
   initialType?: string
   edit?: boolean
+  editData?: any
   check?: (payload: any) => Promise<Result>
   save?: (payload: any) => Promise<void>
   providers?: any[]
@@ -38,6 +39,8 @@ async function fixture(options: {
   resolve?: (params: any) => Promise<any>
   chatGPTStatus?: () => Promise<any>
   chatGPTModels?: () => Promise<any[]>
+  codexStatus?: () => Promise<any>
+  codexModels?: () => Promise<any[]>
 } = {}) {
   const requests: any[] = []
   const saves: any[] = []
@@ -48,6 +51,8 @@ async function fixture(options: {
   let chatGPTStatusCalls = 0
   let chatGPTModelCalls = 0
   const chatGPTModelTypes: string[] = []
+  let codexStatusCalls = 0
+  let codexModelCalls = 0
   const loadedProviders = reactive<Record<string, any[]>>({})
   const providersStore = {
     ensureLoaded: async (type?: string, force?: boolean) => {
@@ -70,10 +75,10 @@ async function fixture(options: {
   const props = reactive<{ visible: boolean; modelType: string; modelData: any }>({
     visible: false,
     modelType: options.initialType || options.type || 'chat',
-    modelData: options.edit ? {
+    modelData: options.edit ? (options.editData || {
       id: 'saved-model', modelName: 'old-model', name: '', source: 'remote',
       baseUrl: 'https://example.com/v1', provider: 'generic', isDefault: false,
-    } : null,
+    }) : null,
   })
   const check = async (payload: any) => {
     requests.push(payload)
@@ -112,6 +117,10 @@ async function fixture(options: {
           return options.chatGPTModels ? options.chatGPTModels() : []
         },
       }
+      if (name === '@/api/codex') return {
+        getCodexStatus: async () => { codexStatusCalls++; return options.codexStatus ? options.codexStatus() : { enabled: true, connected: true } },
+        listCodexModels: async () => { codexModelCalls++; return options.codexModels ? options.codexModels() : [{ slug: 'server-chat', display_name: 'Server Chat' }] },
+      }
       if (name === '@/utils/weknoraCloudModels') return require('../utils/weknoraCloudModels.ts')
       if (name === '@/utils/docsUrl') return require('../utils/docsUrl.ts')
       if (name === '@/stores/modelProvidersState') return require('../stores/modelProvidersState.ts')
@@ -148,6 +157,7 @@ async function fixture(options: {
     vm, props, requests, saves, toasts, visibility, resolves, catalogEvents, catalogRequests,
     chatGPTStatusCalls: () => chatGPTStatusCalls, chatGPTModelCalls: () => chatGPTModelCalls,
     chatGPTModelTypes: () => chatGPTModelTypes,
+    codexStatusCalls: () => codexStatusCalls, codexModelCalls: () => codexModelCalls,
     close: () => app.unmount(),
   }
 }
@@ -193,6 +203,55 @@ test('ChatGPT plan provider is offered for every new remote model type, but only
       assert.equal(f.vm.providerOptions.some((item: any) => item.value === 'chatgpt_plan'), false)
     } finally { f.close() }
   }
+})
+
+test('account authorization is a source flow, not a provider option, and API switching preserves ordinary API drafts', async () => {
+  const f = await fixture({ type: 'chat', providers: [{ value: 'vendor', defaultUrls: { chat: 'https://vendor.example' }, models: [] }] })
+  assert.equal(f.vm.providerOptions.some((item: any) => item.value === 'codex_cli'), false)
+  f.vm.formData.provider = 'vendor'
+  f.vm.formData.modelName = 'typed-api-model'
+  f.vm.selectRemoteSource()
+  assert.equal(f.vm.formData.provider, 'vendor')
+  assert.equal(f.vm.formData.modelName, 'typed-api-model')
+  f.vm.selectCodexSource()
+  await nextTick()
+  assert.equal(f.vm.formData.provider, 'codex_cli')
+  assert.equal(f.vm.formData.source, 'remote')
+  f.vm.selectRemoteSource()
+  assert.equal(f.vm.formData.provider, 'generic')
+  assert.equal(f.vm.formData.modelName, '')
+  assert.equal(f.vm.formData.apiKey, '')
+  f.close()
+})
+
+test('account authorization loads the server catalog only for chat and rejects unavailable or unsupported selections', async () => {
+  const f = await fixture({ type: 'chat', codexStatus: async () => ({ enabled: false, connected: false }) })
+  f.vm.selectCodexSource()
+  await new Promise(resolve => setTimeout(resolve, 0)); await nextTick()
+  assert.equal(f.codexStatusCalls(), 1)
+  assert.equal(f.codexModelCalls(), 0)
+  assert.equal(f.vm.codexState, 'unavailable')
+  await f.vm.handleConfirm()
+  assert.equal(f.saves.length, 0)
+  f.close()
+
+  const nonChat = await fixture({ type: 'embedding' })
+  nonChat.vm.selectCodexSource()
+  assert.notEqual(nonChat.vm.formData.provider, 'codex_cli')
+  assert.equal(nonChat.codexStatusCalls(), 0)
+  nonChat.close()
+})
+
+test('existing server-account models remain selected and read-only from their persisted marker', async () => {
+  const f = await fixture({ type: 'chat', edit: true, editData: {
+    id: 'codex-model', modelName: 'server-chat', name: '', source: 'remote', provider: 'openai',
+    baseUrl: 'https://api.openai.com/v1', isDefault: false, extraConfig: { codex_plan: 'true' },
+  } })
+  assert.equal(f.vm.isCodexEditor, true)
+  assert.equal(f.vm.isCodexExisting, true)
+  assert.equal(f.codexStatusCalls(), 0)
+  assert.equal(f.codexModelCalls(), 0)
+  f.close()
 })
 
 test('ChatGPT plan picker saves only an account-authorized slug with the fixed shared URL', async () => {
