@@ -1,8 +1,8 @@
 <template>
   <div class="chatgpt-settings">
     <div class="section-header">
-      <h2>{{ t('chatgptSettings.title') }}</h2>
-      <p class="section-description">{{ t('chatgptSettings.description') }}</p>
+      <h2>{{ activeAccountTab === 'server' && codexVisible ? t('codexSettings.title') : t('chatgptSettings.title') }}</h2>
+      <p class="section-description">{{ activeAccountTab === 'server' && codexVisible ? t('codexSettings.shortDescription') : t('chatgptSettings.description') }}</p>
     </div>
 
     <div v-if="loading" class="chatgpt-settings__loading">
@@ -10,11 +10,16 @@
     </div>
 
     <template v-else>
-      <t-alert
-        theme="info"
-        :message="t('chatgptSettings.loopbackHint')"
-        class="chatgpt-settings__alert"
-      />
+      <t-tabs v-if="codexVisible" v-model="activeAccountTab" class="chatgpt-settings__account-tabs">
+        <t-tab-panel value="server" :label="t('codexSettings.title')" />
+        <t-tab-panel value="personal" :label="t('chatgptSettings.personalTab')" />
+      </t-tabs>
+
+      <div v-show="activeAccountTab === 'personal'">
+      <details class="chatgpt-settings__loopback">
+        <summary>{{ t('chatgptSettings.loopbackTitle') }}</summary>
+        <p>{{ t('chatgptSettings.loopbackHint') }}</p>
+      </details>
 
       <t-alert
         v-if="status?.pending && status.pending.status !== 'succeeded'"
@@ -123,19 +128,15 @@
       <t-alert theme="info" class="chatgpt-settings__usage" :title="t('chatgptSettings.usageTitle')">
         {{ t('chatgptSettings.usageHint') }}
       </t-alert>
+      </div>
 
-      <section v-if="codexVisible" class="settings-group chatgpt-settings__codex">
-        <div class="chatgpt-settings__models-heading">
-          <h3>{{ t('codexSettings.title') }}</h3>
-          <p>{{ t('codexSettings.description') }}</p>
-        </div>
-
+      <section v-show="activeAccountTab === 'server'" v-if="codexVisible" class="settings-group chatgpt-settings__codex">
         <t-alert v-if="codexStatusLoadFailed" theme="warning" :title="t('codexSettings.statusLoadFailed')">
           <t-button variant="outline" :loading="codexLoading" @click="loadCodex">{{ t('common.refresh') }}</t-button>
         </t-alert>
 
         <template v-else-if="codexStatus">
-        <div class="setting-row">
+        <div class="setting-row chatgpt-settings__account-status-card">
           <div class="setting-info">
             <div class="setting-label">{{ t('codexSettings.connectionTitle') }}</div>
             <p class="desc">{{ codexConnectionDescription }}</p>
@@ -165,7 +166,7 @@
             <t-button variant="outline" @click="loadCodexModels">{{ t('common.refresh') }}</t-button>
           </t-alert>
           <t-empty v-else-if="codexModels.length === 0" :description="t('codexSettings.modelsEmpty')" />
-          <div v-else class="chatgpt-settings__model-list">
+          <div v-else class="chatgpt-settings__model-list chatgpt-settings__model-grid">
             <div v-for="model in codexModels" :key="model.slug" class="chatgpt-settings__model-row">
               <div>
                 <div class="chatgpt-settings__model-name">{{ model.display_name }}</div>
@@ -236,7 +237,7 @@
                 </div>
               </div>
               <div class="chatgpt-settings__grant-actions">
-                <t-button theme="primary" :loading="savingCodexGrants" @click="saveCodexGrants">
+                <t-button theme="primary" :disabled="!grantMemberID || savingCodexGrants" :loading="savingCodexGrants" @click="saveCodexGrants">
                   {{ t('codexSettings.grantsSave') }}
                 </t-button>
               </div>
@@ -316,6 +317,8 @@ const selectingCodexSlug = ref('')
 const codexStatus = ref<CodexConnectionStatus | null>(null)
 const codexModels = ref<CodexModel[]>([])
 const enabledCodexModelSlugs = ref(new Set<string>())
+const activeAccountTab = ref<'server' | 'personal'>('personal')
+let accountTabInitialized = false
 const codexGrantsLoading = ref(false)
 const codexGrantsLoadFailed = ref(false)
 const savingCodexGrants = ref(false)
@@ -344,7 +347,7 @@ const connectionDescription = computed(() => {
 
 const codexConnectionDescription = computed(() => (
   codexStatus.value?.connected
-    ? t('codexSettings.connectedDescription')
+    ? t('codexSettings.sharedDescription')
     : t('codexSettings.notConnectedDescription')
 ))
 const codexVisible = computed(() => !!codexStatus.value?.enabled || codexStatusLoadFailed.value)
@@ -441,6 +444,10 @@ async function loadCodex() {
     const nextStatus = await getCodexStatus()
     if (unmounted) return
     codexStatus.value = nextStatus
+    if (!accountTabInitialized) {
+      activeAccountTab.value = nextStatus.enabled ? 'server' : 'personal'
+      accountTabInitialized = true
+    }
     codexStatusLoadFailed.value = false
     if (nextStatus.enabled && nextStatus.connected) {
       await loadCodexModels()
@@ -660,6 +667,29 @@ onUnmounted(() => { unmounted = true; stopPolling({ closePopup: true }) })
   margin-bottom: 16px;
 }
 
+.chatgpt-settings__account-tabs { margin: 0 0 20px; }
+.chatgpt-settings__loopback {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--td-bg-color-secondarycontainer);
+  color: var(--td-text-color-secondary);
+
+  summary { cursor: pointer; color: var(--td-text-color-primary); }
+  p { margin: 8px 0 0; line-height: 1.6; }
+}
+.chatgpt-settings__account-status-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--td-brand-color) 28%, var(--td-component-stroke));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--td-brand-color) 5%, var(--td-bg-color-container));
+}
+.chatgpt-settings__account-status-card .setting-info p { margin: 6px 0; }
+
 .chatgpt-settings__connection-actions,
 .chatgpt-settings__model-action {
   display: flex;
@@ -682,6 +712,20 @@ onUnmounted(() => { unmounted = true; stopPolling({ closePopup: true }) })
 .chatgpt-settings__model-list {
   border: 1px solid var(--td-component-stroke);
   border-radius: 6px;
+}
+
+.chatgpt-settings__model-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  gap: 10px;
+  border: 0;
+  margin-top: 16px;
+
+  .chatgpt-settings__model-row {
+    border: 1px solid var(--td-component-stroke);
+    border-radius: 6px;
+    background: var(--td-bg-color-container);
+  }
 }
 
 .chatgpt-settings__model-row {

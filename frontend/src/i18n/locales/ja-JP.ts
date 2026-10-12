@@ -22,6 +22,7 @@ export default {
     reset: '環境設定を復元', resetConfirm: 'データベースの LDAP 上書きを削除し、環境設定を復元します。続行しますか？', resetSuccess: '環境設定を復元しました', resetFailed: 'LDAP 設定の復元に失敗しました',
   },
   chatgptSettings: {
+    personalTab: '個人接続', loopbackTitle: 'リモート認可の説明',
     navLabel: 'ChatGPT', title: 'ChatGPT サブスクリプション', description: 'ご自身の ChatGPT Plus または Pro アカウントを接続し、WeKnora で利用可能なモデルを使用します。',
     loading: 'ChatGPT 接続を読み込み中...', loadFailed: 'ChatGPT 接続の読み込みに失敗しました',
     loopbackHint: '認可にはローカルのループバックコールバックを使用します。ブラウザと WeKnora は同じマシンで動作している必要があります。Docker またはリモートサーバーでは、認可前に SSH ポート転送でバックエンドのループバックアドレスへ接続してください。ブラウザからリモートサーバーへ直接コールバックすることはできません。',
@@ -34,7 +35,9 @@ export default {
     usageTitle: 'この接続の用途', usageHint: 'WeKnora はこのページに ChatGPT パスワードを表示または保存しません。不要になった場合はここで切断するか、ChatGPT でサブスクリプションを管理してください。', welcomeTitle: 'ChatGPT の準備ができました', welcomeDescription: '下でモデルを有効にしてから、WeKnora の既存モデル選択で個人の対話リクエスト用に選択してください。', welcomeConfirm: '了解',
   },
   codexSettings: {
+    shortDescription: 'サーバーでログイン済みの Codex アカウントのモデルとユーザー権限を管理します。',
     title: 'サーバー Codex アカウント', description: 'サーバーでログイン済みの Codex アカウントから対話モデルを有効にします。ブラウザーのコールバックやパスワードは不要です。', connectionTitle: 'サーバーログイン状態', connected: 'サーバーでログイン済み', notConnected: 'サーバーで未ログイン', connectedDescription: 'このアカウントは、紐付けられたユーザーが開始する対話リクエストでのみ利用できます。', notConnectedDescription: 'サーバーで Codex CLI にログインしてから状態を更新してください。', connectedAccount: 'サーバーアカウント：{email}', plan: 'プラン：{plan}', statusLoadFailed: 'サーバー Codex の状態を読み込めません。再試行してください。', modelsLoading: 'サーバー Codex モデルを読み込み中...', modelsEmpty: 'このサーバーアカウントで利用できる Codex モデルはありません。', modelsLoadFailed: 'サーバー Codex モデルを読み込めませんでした', enableModel: 'WeKnora で有効にする', modelEnabled: '有効', modelEnabledSuccess: 'Codex モデルを WeKnora で有効にしました', modelEnableFailed: 'Codex モデルを有効にできませんでした', usageTitle: '利用範囲', usageHint: 'サーバー Codex の認証情報は表示またはエクスポートされません。この接続は対話モデルのみをサポートし、埋め込み、リランキング、画像モデルは利用できません。', grantsTitle: 'メンバーモデルの権限', grantsDescription: '現在のワークスペースのメンバーと使用を許可する Codex モデルを選択します。', grantsUsageWarning: '許可されたリクエストはサーバー Codex アカウントの利用枠を消費します。', grantsLoading: 'メンバー権限を読み込み中...', grantsLoadFailed: 'メンバー権限を読み込めませんでした', grantMember: 'ワークスペースメンバー', grantMemberPlaceholder: '権限を付与するメンバーを選択', grantsMembersEmpty: 'このワークスペースには他の有効なメンバーがいません。', grantModel: '使用を許可', grantsSave: '権限を保存', grantsSaved: 'メンバーモデルの権限を保存しました', grantSaveFailed: 'メンバーモデルの権限を保存できませんでした',
+    sharedDescription: 'アカウント所有者と明示的に許可されたユーザーが選択したモデルを利用できます。',
   },
   modelCatalog: {
     "title": "モデルカタログ",

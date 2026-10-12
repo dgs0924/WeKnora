@@ -23,6 +23,7 @@ export default {
     reset: '恢復環境變數設定', resetConfirm: '將刪除資料庫中的 LDAP 覆寫設定，並恢復至環境變數設定。確定繼續嗎？', resetSuccess: '已恢復環境變數設定', resetFailed: '恢復 LDAP 設定失敗',
   },
   chatgptSettings: {
+    personalTab: '個人綁定', loopbackTitle: '遠端授權說明',
     navLabel: 'ChatGPT', title: 'ChatGPT 訂閱', description: '連結您自己的 ChatGPT Plus 或 Pro 帳號，在 WeKnora 中使用帳號可用的模型。',
     loading: '正在載入 ChatGPT 連結狀態...', loadFailed: '載入 ChatGPT 連結狀態失敗',
     loopbackHint: '授權使用本機迴路位址回呼，瀏覽器與 WeKnora 必須執行於同一台機器。Docker 或遠端伺服器部署時，請先透過 SSH 將連接埠轉送到後端迴路位址；瀏覽器無法直接回呼遠端伺服器。',
@@ -35,7 +36,9 @@ export default {
     usageTitle: '連結用途', usageHint: 'WeKnora 不會在此頁面顯示或儲存您的 ChatGPT 密碼。不再使用時，可在這裡中斷連結，或前往 ChatGPT 管理訂閱。', welcomeTitle: 'ChatGPT 已就緒', welcomeDescription: '請在下方啟用模型，然後在 WeKnora 現有模型選擇器中選用它處理您個人發起的互動請求。', welcomeConfirm: '知道了',
   },
   codexSettings: {
+    shortDescription: '管理伺服器已登入 Codex 帳號的模型與使用者授權。',
     title: '伺服器 Codex 帳號', description: '使用已在伺服器登入的 Codex 帳號啟用對話模型，無需瀏覽器回呼或輸入密碼。', connectionTitle: '伺服器登入狀態', connected: '已在伺服器登入', notConnected: '尚未在伺服器登入', connectedDescription: '此帳號只供目前綁定使用者發起的對話請求使用。', notConnectedDescription: '請先在伺服器完成 Codex CLI 登入，再重新整理狀態。', connectedAccount: '伺服器帳號：{email}', plan: '訂閱：{plan}', statusLoadFailed: '無法讀取伺服器 Codex 狀態，請重試。', modelsLoading: '正在載入伺服器 Codex 模型...', modelsEmpty: '此伺服器帳號沒有可用的 Codex 模型。', modelsLoadFailed: '載入伺服器 Codex 模型失敗', enableModel: '在 WeKnora 中啟用', modelEnabled: '已啟用', modelEnabledSuccess: 'Codex 模型已在 WeKnora 中啟用', modelEnableFailed: '啟用 Codex 模型失敗', usageTitle: '使用範圍', usageHint: '伺服器 Codex 憑據不會顯示或匯出。此連線僅支援對話模型，不支援向量、重排或圖像模型。', grantsTitle: '成員模型授權', grantsDescription: '選擇目前空間成員，再勾選其可使用的已啟用 Codex 模型。', grantsUsageWarning: '已授權的請求將消耗伺服器 Codex 帳號的方案額度。', grantsLoading: '正在載入成員授權...', grantsLoadFailed: '載入成員授權失敗', grantMember: '空間成員', grantMemberPlaceholder: '請選擇要授權的成員', grantsMembersEmpty: '目前空間沒有其他可授權的活躍成員。', grantModel: '允許使用', grantsSave: '儲存授權', grantsSaved: '成員模型授權已儲存', grantSaveFailed: '儲存成員模型授權失敗',
+    sharedDescription: '帳號持有人和明確授權的使用者可使用所選模型。',
   },
   modelCatalog: {
     "title": "模型目錄",

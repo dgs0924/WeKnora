@@ -25,6 +25,7 @@ export default {
     reset: 'Restore environment configuration', resetConfirm: 'This removes the database LDAP override and restores the environment configuration. Continue?', resetSuccess: 'Environment configuration restored', resetFailed: 'Failed to restore LDAP configuration',
   },
   chatgptSettings: {
+    personalTab: 'Personal connection', loopbackTitle: 'Remote authorization note',
     navLabel: 'ChatGPT', title: 'ChatGPT subscription',
     description: 'Connect your own ChatGPT Plus or Pro account to use its available models in WeKnora.',
     loading: 'Loading ChatGPT connection...', loadFailed: 'Failed to load the ChatGPT connection',
@@ -44,7 +45,9 @@ export default {
     usageTitle: 'How this connection is used', usageHint: 'WeKnora never displays or stores your ChatGPT password in this page. Disconnect here or manage your subscription in ChatGPT when you no longer want to use it.', welcomeTitle: 'ChatGPT is ready', welcomeDescription: 'Enable a model below, then select it from WeKnora’s existing model picker for your personal interactive requests.', welcomeConfirm: 'Got it',
   },
   codexSettings: {
+    shortDescription: 'Manage models and user access for the Codex account signed in on this server.',
     title: 'Server Codex account', description: 'Enable conversation models from the Codex account already signed in on this server. No browser callback or password is needed.', connectionTitle: 'Server sign-in status', connected: 'Signed in on server', notConnected: 'Not signed in on server', connectedDescription: 'This account is available only for conversation requests initiated by the bound user.', notConnectedDescription: 'Sign in to Codex CLI on the server, then refresh this status.', connectedAccount: 'Server account: {email}', plan: 'Plan: {plan}', statusLoadFailed: 'Could not load the server Codex status. Please retry.', modelsLoading: 'Loading server Codex models...', modelsEmpty: 'No Codex models are available for this server account.', modelsLoadFailed: 'Could not load server Codex models', enableModel: 'Enable in WeKnora', modelEnabled: 'Enabled', modelEnabledSuccess: 'Codex model enabled in WeKnora', modelEnableFailed: 'Could not enable Codex model', usageTitle: 'Availability', usageHint: 'Server Codex credentials are never displayed or exported. This connection supports conversation models only; embedding, reranking, and image models are unavailable.', grantsTitle: 'Member model access', grantsDescription: 'Choose a current workspace member and select the enabled Codex models they may use. Members without access do not see these models.', grantsUsageWarning: 'Authorized requests consume the server Codex account allowance. New requests follow saved access immediately; in-progress requests are not guaranteed to stop.', grantsLoading: 'Loading member access...', grantsLoadFailed: 'Could not load member access', grantMember: 'Workspace member', grantMemberPlaceholder: 'Choose a member to grant access', grantsMembersEmpty: 'There are no other active members in this workspace.', grantModel: 'Allow use', grantsSave: 'Save access', grantsSaved: 'Member model access saved', grantSaveFailed: 'Could not save member model access',
+    sharedDescription: 'The account holder and explicitly authorized users can use the selected models.',
   },
   modelCatalog: {
     "title": "Model catalog",
