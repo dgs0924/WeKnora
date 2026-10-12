@@ -1,4 +1,17 @@
 import { INTEGRATION_TABS, type IntegrationTab } from './integrations'
+import type { Router } from 'vue-router'
+
+/** Closing a route-backed modal must leave settings even after a deep link or
+ * another settings entry in browser history. Keep valid business-page context. */
+export function settingsCloseTarget(previous: unknown, resolve: Router['resolve']): string {
+  const fallback = '/platform/knowledge-bases'
+  if (typeof previous !== 'string' || !previous.startsWith('/platform/')) return fallback
+  const target = resolve(previous)
+  if (target.path.replace(/\/$/, '') === '/platform/settings'
+    || target.matched.length === 0
+    || target.matched[target.matched.length - 1]?.redirect) return fallback
+  return target.fullPath
+}
 
 export const INTEGRATION_SECTION_PREFIX = 'integration-'
 

@@ -212,6 +212,7 @@ import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useModalShell } from '@/composables/useModalShell'
+import { settingsCloseTarget } from '@/config/settingsRoute'
 import SettingsModalShell from '@/components/SettingsModalShell.vue'
 import SystemInfo from './SystemInfo.vue'
 import TenantInfo from './TenantInfo.vue'
@@ -498,14 +499,10 @@ const handleClose = () => {
     document.activeElement.blur()
   }
   uiStore.closeSettings()
-  // 如果当前路由是设置页，返回上一页
+  // 路由模式必须明确离开设置页；历史可能为空或仍指向另一个设置分区。
   if (route.path === '/platform/settings') {
-    const sec = route.query.section
-    if (sec === 'model-catalog' || sec === 'system-global' || sec === 'ldap' || sec === 'runtime-queues' || sec === 'platform-api-keys' || sec === 'system-audit-log') {
-      router.push('/platform/knowledge-bases')
-    } else {
-      router.back()
-    }
+    const target = settingsCloseTarget(router.options.history.state.back, router.resolve)
+    void router.replace(target)
   }
 }
 

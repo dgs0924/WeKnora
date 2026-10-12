@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { createMemoryHistory, createRouter } from 'vue-router'
 
 import {
   buildSettingsRouteQuery,
@@ -7,6 +8,7 @@ import {
   isIntegrationSection,
   normalizeSettingsSection,
   settingsQueryUnchanged,
+  settingsCloseTarget,
 } from './settingsRoute'
 
 test('every settings nav item writes only section', () => {
@@ -76,4 +78,29 @@ test('canonical settings query skips a redundant replace', () => {
     ),
     false,
   )
+})
+
+const closeRouter = createRouter({
+  history: createMemoryHistory(),
+  routes: [{ path: '/platform', redirect: '/platform/knowledge-bases', children: [
+    { path: 'settings', component: {} },
+    { path: 'knowledge-bases', component: {} },
+    { path: 'chat/:id', component: {} },
+    { path: 'tenant', redirect: '/platform/settings' },
+  ] }],
+})
+
+test('closing direct or consecutive settings entries always leaves settings', async () => {
+  for (const previous of [null, undefined, '/platform/settings?section=models', '/platform/settings/?section=chatgpt', '/platform/tenant', 'https://example.com']) {
+    await closeRouter.push('/platform/settings?section=models')
+    await closeRouter.replace(settingsCloseTarget(previous, closeRouter.resolve))
+    assert.equal(closeRouter.currentRoute.value.path, '/platform/knowledge-bases')
+  }
+})
+
+test('closing settings preserves a valid chat location including query and anchor', async () => {
+  const previous = '/platform/chat/conversation-1?view=history#message-2'
+  await closeRouter.push('/platform/settings?section=chatgpt')
+  await closeRouter.replace(settingsCloseTarget(previous, closeRouter.resolve))
+  assert.equal(closeRouter.currentRoute.value.fullPath, previous)
 })
