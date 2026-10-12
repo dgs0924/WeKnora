@@ -83,6 +83,7 @@ func (s *wikiEnqueueFailureChunkService) ListChunksByKnowledgeID(
 type wikiEnqueueFailureTaskQueue struct {
 	interfaces.TaskEnqueuer
 	taskTypes       []string
+	tasks           []*asynq.Task
 	extractChunkIDs []string
 	wikiErr         error
 }
@@ -92,6 +93,7 @@ func (q *wikiEnqueueFailureTaskQueue) Enqueue(
 	_ ...asynq.Option,
 ) (*asynq.TaskInfo, error) {
 	q.taskTypes = append(q.taskTypes, task.Type())
+	q.tasks = append(q.tasks, task)
 	if task.Type() == types.TypeWikiIngest {
 		return nil, q.wikiErr
 	}

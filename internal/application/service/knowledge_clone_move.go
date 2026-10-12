@@ -1540,6 +1540,7 @@ func (s *knowledgeService) enqueueMovedKnowledge(
 			EnableQuestionGeneration: enableQuestionGeneration,
 			QuestionCount:            questionCount,
 			Language:                 lang,
+			Initiator:                types.TaskInitiatorFromContext(ctx),
 		}
 
 		langfuse.InjectTracing(ctx, &taskPayload)

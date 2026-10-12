@@ -85,6 +85,7 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 		return fmt.Errorf("unmarshal knowledge post process payload: %w", err)
 	}
+	ctx = payload.Initiator.Apply(ctx)
 
 	logger.Infof(ctx, "[KnowledgePostProcess] Orchestrating post processing for knowledge: %s", payload.KnowledgeID)
 
@@ -578,6 +579,7 @@ func (s *KnowledgePostProcessService) enqueueSummaryGenerationTask(ctx context.C
 		KnowledgeID:     payload.KnowledgeID,
 		Language:        payload.Language,
 		Attempt:         attempt,
+		Initiator:       payload.Initiator,
 	}
 	langfuse.InjectTracing(ctx, &taskPayload)
 	payloadBytes, err := json.Marshal(taskPayload)
@@ -665,6 +667,7 @@ func (s *KnowledgePostProcessService) enqueueQuestionGenerationTasks(
 			Attempt:         attempt,
 			ChunkIDs:        chunkIDs,
 			BatchIndex:      batchIndex,
+			Initiator:       payload.Initiator,
 		}
 		// Boundary context: the text chunk just before / after this window.
 		if start > 0 {

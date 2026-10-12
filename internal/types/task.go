@@ -313,6 +313,10 @@ type DocumentProcessPayload struct {
 	EnableQuestionGeneration bool     `json:"enable_question_generation"` // 是否启用问题生成
 	QuestionCount            int      `json:"question_count,omitempty"`   // 每个chunk生成的问题数量
 	Language                 string   `json:"language,omitempty"`         // Request locale for {{language}} in prompt templates
+	// Initiator is the authenticated user that started this parse. It travels
+	// through post-processing so personal model credentials remain scoped to
+	// the caller instead of being inferred from a model owner.
+	Initiator TaskInitiator `json:"initiator,omitempty"`
 	// Attempt is the per-knowledge attempt number this task belongs to.
 	// Set on enqueue (initial parse → attempt 1; reparse → max+1) so
 	// every span recorded by this task lands on the right attempt
@@ -379,8 +383,9 @@ type QuestionGenerationPayload struct {
 	// rebuild the same surrounding context the legacy whole-knowledge loop
 	// used at the batch boundaries, without re-listing every chunk of the
 	// knowledge. Empty when the batch is at a document boundary.
-	PrevChunkID string `json:"prev_chunk_id,omitempty"`
-	NextChunkID string `json:"next_chunk_id,omitempty"`
+	PrevChunkID string        `json:"prev_chunk_id,omitempty"`
+	NextChunkID string        `json:"next_chunk_id,omitempty"`
+	Initiator   TaskInitiator `json:"initiator,omitempty"`
 }
 
 // SummaryGenerationPayload represents the summary generation task payload
@@ -397,7 +402,8 @@ type SummaryGenerationPayload struct {
 	// Attempt links this task to the parent parse attempt so the worker
 	// can record a postprocess.summary subspan under the right attempt's
 	// postprocess stage. See QuestionGenerationPayload.Attempt notes.
-	Attempt int `json:"attempt,omitempty"`
+	Attempt   int           `json:"attempt,omitempty"`
+	Initiator TaskInitiator `json:"initiator,omitempty"`
 }
 
 // KBClonePayload represents the knowledge base clone task payload
@@ -493,12 +499,13 @@ type KnowledgeMoveProgress struct {
 // Used for both create (publish) and update operations.
 type ManualProcessPayload struct {
 	TracingContext
-	RequestId       string `json:"request_id"`
-	TenantID        uint64 `json:"tenant_id"`
-	KnowledgeID     string `json:"knowledge_id"`
-	KnowledgeBaseID string `json:"knowledge_base_id"`
-	Content         string `json:"content"`      // cleaned markdown content
-	NeedCleanup     bool   `json:"need_cleanup"` // true for update, false for create
+	RequestId       string        `json:"request_id"`
+	TenantID        uint64        `json:"tenant_id"`
+	KnowledgeID     string        `json:"knowledge_id"`
+	KnowledgeBaseID string        `json:"knowledge_base_id"`
+	Content         string        `json:"content"`      // cleaned markdown content
+	NeedCleanup     bool          `json:"need_cleanup"` // true for update, false for create
+	Initiator       TaskInitiator `json:"initiator,omitempty"`
 }
 
 // ImageMultimodalPayload represents the image multimodal processing task payload.
@@ -551,11 +558,12 @@ type ImageMultimodalPayload struct {
 // KnowledgePostProcessPayload represents the knowledge post process task payload.
 type KnowledgePostProcessPayload struct {
 	TracingContext
-	TenantID        uint64 `json:"tenant_id"`
-	KnowledgeID     string `json:"knowledge_id"`
-	KnowledgeBaseID string `json:"knowledge_base_id"`
-	Language        string `json:"language,omitempty"` // Request locale for {{language}} in prompt templates
-	Attempt         int    `json:"attempt,omitempty"`
+	TenantID        uint64        `json:"tenant_id"`
+	KnowledgeID     string        `json:"knowledge_id"`
+	KnowledgeBaseID string        `json:"knowledge_base_id"`
+	Language        string        `json:"language,omitempty"` // Request locale for {{language}} in prompt templates
+	Attempt         int           `json:"attempt,omitempty"`
+	Initiator       TaskInitiator `json:"initiator,omitempty"`
 }
 
 // KnowledgeAutoTagPayload identifies a document whose parsed content should be

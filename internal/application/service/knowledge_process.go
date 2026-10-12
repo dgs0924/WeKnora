@@ -1369,6 +1369,7 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 		logger.Errorf(ctx, "Failed to unmarshal summary generation payload: %v", err)
 		return nil // Don't retry on unmarshal error
 	}
+	ctx = payload.Initiator.Apply(ctx)
 	logger.Infof(ctx, "Processing summary generation for knowledge: %s", payload.KnowledgeID)
 
 	// Set tenant and language context
@@ -1762,6 +1763,7 @@ func (s *knowledgeService) ProcessQuestionGeneration(ctx context.Context, t *asy
 		logger.Errorf(ctx, "Failed to unmarshal question generation payload: %v", err)
 		return nil // Don't retry on unmarshal error
 	}
+	ctx = payload.Initiator.Apply(ctx)
 	if len(payload.ChunkIDs) > 0 || payload.ChunkID != "" {
 		return s.processQuestionGenerationForChunks(ctx, t, payload)
 	}
@@ -2961,6 +2963,7 @@ func (s *knowledgeService) reparseKnowledge(
 			QuestionCount:            questionCount,
 			Language:                 lang,
 			Attempt:                  reparseAttempt,
+			Initiator:                types.TaskInitiatorFromContext(ctx),
 		}
 
 		langfuse.InjectTracing(ctx, &taskPayload)
@@ -3015,6 +3018,7 @@ func (s *knowledgeService) reparseKnowledge(
 			QuestionCount:            questionCount,
 			Language:                 lang,
 			Attempt:                  reparseAttempt,
+			Initiator:                types.TaskInitiatorFromContext(ctx),
 		}
 
 		langfuse.InjectTracing(ctx, &taskPayload)
@@ -3066,6 +3070,7 @@ func (s *knowledgeService) reparseKnowledge(
 			QuestionCount:            questionCount,
 			Language:                 lang,
 			Attempt:                  reparseAttempt,
+			Initiator:                types.TaskInitiatorFromContext(ctx),
 		}
 
 		langfuse.InjectTracing(ctx, &taskPayload)
@@ -3525,6 +3530,7 @@ func (s *knowledgeService) ProcessManualUpdate(ctx context.Context, t *asynq.Tas
 		logger.Errorf(ctx, "failed to unmarshal manual process task payload: %v", err)
 		return nil
 	}
+	ctx = payload.Initiator.Apply(ctx)
 
 	ctx = logger.WithRequestID(ctx, payload.RequestId)
 	ctx = logger.WithField(ctx, "manual_process", payload.KnowledgeID)
@@ -3640,6 +3646,7 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 		logger.Errorf(ctx, "failed to unmarshal document process task payload: %v", err)
 		return nil
 	}
+	ctx = payload.Initiator.Apply(ctx)
 
 	ctx = logger.WithRequestID(ctx, payload.RequestId)
 	ctx = logger.WithField(ctx, "document_process", payload.KnowledgeID)
@@ -4641,6 +4648,7 @@ func (s *knowledgeService) enqueueKnowledgePostProcessTask(
 		KnowledgeBaseID: knowledge.KnowledgeBaseID,
 		Language:        types.LanguageFromContextOrDefault(ctx),
 		Attempt:         attemptFromCtx(ctx),
+		Initiator:       types.TaskInitiatorFromContext(ctx),
 	}
 	langfuse.InjectTracing(ctx, &payload)
 	payloadBytes, err := json.Marshal(payload)

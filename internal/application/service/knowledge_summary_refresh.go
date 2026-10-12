@@ -120,6 +120,7 @@ func enqueueSummaryRefresh(
 		Language:        language,
 		Attempt:         tracker.LatestAttempt(ctx, knowledge.ID),
 		Refresh:         true,
+		Initiator:       types.TaskInitiatorFromContext(ctx),
 	}
 	langfuse.InjectTracing(ctx, &payload)
 	payloadBytes, err := json.Marshal(payload)

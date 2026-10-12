@@ -125,6 +125,64 @@ func TestKnowledgePostProcessOptionalSummary(t *testing.T) {
 	}
 }
 
+func TestKnowledgePostProcessPreservesInitiatorForModelSubtasks(t *testing.T) {
+	knowledge := &types.Knowledge{
+		ID: "doc", TenantID: 7, KnowledgeBaseID: "kb", ParseStatus: types.ParseStatusProcessing,
+	}
+	repo := &optionalSummaryKnowledgeRepo{
+		wikiEnqueueFailureKnowledgeRepo: wikiEnqueueFailureKnowledgeRepo{knowledge: knowledge},
+	}
+	queue := &wikiEnqueueFailureTaskQueue{}
+	service := &KnowledgePostProcessService{
+		knowledgeRepo: repo,
+		kbService: &wikiEnqueueFailureKBService{kb: &types.KnowledgeBase{
+			ID: "kb", TenantID: 7,
+			IndexingStrategy:         types.DefaultIndexingStrategy(),
+			QuestionGenerationConfig: &types.QuestionGenerationConfig{Enabled: true},
+		}},
+		chunkRepo: &wikiEnqueueFailureChunkRepo{chunks: []*types.Chunk{{
+			ID: "chunk", TenantID: 7, KnowledgeID: "doc", KnowledgeBaseID: "kb",
+			ChunkType: types.ChunkTypeText, Content: "Document content for summary and questions.",
+		}}},
+		taskEnqueuer: queue,
+		pendingRepo:  &wikiEnqueueFailurePendingRepo{knowledgeRepo: &repo.wikiEnqueueFailureKnowledgeRepo},
+	}
+	initiator := types.TaskInitiator{UserID: "requesting-user", Role: types.TenantRoleContributor}
+	body, err := json.Marshal(types.KnowledgePostProcessPayload{
+		TenantID: 7, KnowledgeID: "doc", KnowledgeBaseID: "kb", Initiator: initiator,
+	})
+	require.NoError(t, err)
+	require.NoError(t, service.Handle(context.Background(), asynq.NewTask(types.TypeKnowledgePostProcess, body)))
+
+	var summary types.SummaryGenerationPayload
+	var question types.QuestionGenerationPayload
+	for _, task := range queue.tasks {
+		switch task.Type() {
+		case types.TypeSummaryGeneration:
+			require.NoError(t, json.Unmarshal(task.Payload(), &summary))
+		case types.TypeQuestionGeneration:
+			require.NoError(t, json.Unmarshal(task.Payload(), &question))
+		}
+	}
+	require.Equal(t, initiator, summary.Initiator)
+	require.Equal(t, initiator, question.Initiator)
+}
+
+func TestKnowledgePostProcessDoesNotInventInitiatorForLegacyTasks(t *testing.T) {
+	queue := &wikiEnqueueFailureTaskQueue{}
+	service := &KnowledgePostProcessService{taskEnqueuer: queue}
+	payload := types.KnowledgePostProcessPayload{
+		TenantID: 7, KnowledgeID: "legacy-doc", KnowledgeBaseID: "kb",
+	}
+
+	require.True(t, service.enqueueSummaryGenerationTask(context.Background(), payload, 1))
+	require.Len(t, queue.tasks, 1)
+	var summary types.SummaryGenerationPayload
+	require.NoError(t, json.Unmarshal(queue.tasks[0].Payload(), &summary))
+	require.Empty(t, summary.Initiator.UserID)
+	require.Zero(t, summary.Initiator.APIKeyID)
+}
+
 func TestKnowledgePostProcessWithoutSummaryCompletionFailure(t *testing.T) {
 	for _, tc := range []struct {
 		name    string

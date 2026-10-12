@@ -238,6 +238,7 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 		EnableQuestionGeneration: enableQuestionGeneration,
 		QuestionCount:            questionCount,
 		Language:                 lang,
+		Initiator:                types.TaskInitiatorFromContext(ctx),
 	}
 
 	langfuse.InjectTracing(ctx, &taskPayload)
@@ -434,6 +435,7 @@ func (s *knowledgeService) CreateKnowledgeFromURL(ctx context.Context,
 		EnableQuestionGeneration: enableQuestionGeneration,
 		QuestionCount:            questionCount,
 		Language:                 lang,
+		Initiator:                types.TaskInitiatorFromContext(ctx),
 	}
 
 	langfuse.InjectTracing(ctx, &taskPayload)
@@ -678,6 +680,7 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 		EnableQuestionGeneration: enableQuestionGeneration,
 		QuestionCount:            questionCount,
 		Language:                 lang,
+		Initiator:                types.TaskInitiatorFromContext(ctx),
 	}
 
 	langfuse.InjectTracing(ctx, &taskPayload)
@@ -955,6 +958,7 @@ func (s *knowledgeService) createKnowledgeFromPassageInternal(ctx context.Contex
 			EnableQuestionGeneration: enableQuestionGeneration,
 			QuestionCount:            questionCount,
 			Language:                 lang,
+			Initiator:                types.TaskInitiatorFromContext(ctx),
 		}
 
 		langfuse.InjectTracing(ctx, &taskPayload)
@@ -1135,6 +1139,7 @@ func (s *knowledgeService) enqueueManualProcessing(ctx context.Context,
 		KnowledgeBaseID: knowledge.KnowledgeBaseID,
 		Content:         content,
 		NeedCleanup:     needCleanup,
+		Initiator:       types.TaskInitiatorFromContext(ctx),
 	}
 	langfuse.InjectTracing(ctx, &payload)
 	payloadBytes, err := json.Marshal(payload)
