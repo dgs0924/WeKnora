@@ -17,7 +17,7 @@
       />
 
       <t-alert
-        v-if="status?.pending"
+        v-if="status?.pending && status.pending.status !== 'succeeded'"
         :theme="pendingFailed ? 'warning' : 'info'"
         :title="pendingFailed ? t('chatgptSettings.authorizationFailed') : t('chatgptSettings.authorizationPending')"
         :message="pendingFailed ? t('chatgptSettings.authorizationFailedHint') : t('chatgptSettings.authorizationPendingHint')"
@@ -93,6 +93,9 @@
         <div v-if="status?.connected && modelsLoading" class="chatgpt-settings__models-loading">
           <t-loading :text="t('chatgptSettings.modelsLoading')" size="small" />
         </div>
+        <t-alert v-else-if="status?.connected && modelsLoadFailed" theme="warning" :title="t('chatgptSettings.modelsLoadFailed')">
+          <t-button variant="outline" @click="loadModels">{{ t('common.refresh') }}</t-button>
+        </t-alert>
         <t-empty v-else-if="status?.connected && models.length === 0" :description="t('chatgptSettings.modelsEmpty')" />
         <div v-else-if="status?.connected" class="chatgpt-settings__model-list">
           <div v-for="model in models" :key="model.slug" class="chatgpt-settings__model-row">
@@ -158,6 +161,7 @@ const chatResources = useChatResourcesStore()
 
 const loading = ref(true)
 const modelsLoading = ref(false)
+const modelsLoadFailed = ref(false)
 const authorizing = ref(false)
 const disconnecting = ref(false)
 const selectingSlug = ref('')
@@ -213,6 +217,7 @@ async function loadModels() {
     return
   }
   modelsLoading.value = true
+  modelsLoadFailed.value = false
   try {
     const availableModels = await listChatGPTModels()
     if (unmounted) return
@@ -223,7 +228,8 @@ async function loadModels() {
   } catch (error: any) {
     if (unmounted) return
     models.value = []
-    MessagePlugin.error(error?.message || t('chatgptSettings.modelsLoadFailed'))
+    modelsLoadFailed.value = true
+    MessagePlugin.error(t('chatgptSettings.modelsLoadFailed'))
   } finally {
     if (!unmounted) modelsLoading.value = false
   }
