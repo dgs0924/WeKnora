@@ -27,6 +27,8 @@ export interface ChatGPTAuthorization {
 export interface ChatGPTModel {
   slug: string
   display_name: string
+  /** Whether this account-authorized model accepts image input. */
+  supports_vision?: boolean
   /** The corresponding WeKnora model ID, once this model has been enabled. */
   id?: string
 }
@@ -58,14 +60,21 @@ export async function authorizeChatGPT(): Promise<ChatGPTAuthorization> {
   return payload<ChatGPTAuthorization>(await post(`${endpoint}/authorize`) as unknown as ChatGPTAuthorization)
 }
 
-export async function listChatGPTModels(): Promise<ChatGPTModel[]> {
-  const response = payload<ChatGPTModelsResponse>(await get(`${endpoint}/models`) as unknown as ChatGPTModelsResponse)
+export type ChatGPTPlanModelType = 'KnowledgeQA' | 'VLLM'
+
+export async function listChatGPTModels(modelType: ChatGPTPlanModelType = 'KnowledgeQA'): Promise<ChatGPTModel[]> {
+  const query = modelType === 'VLLM' ? '?model_type=VLLM' : ''
+  const response = payload<ChatGPTModelsResponse>(await get(`${endpoint}/models${query}`) as unknown as ChatGPTModelsResponse)
   return Array.isArray(response.models) ? response.models : []
 }
 
-export async function selectChatGPTModel(slug: string): Promise<ChatGPTModelSelection> {
+export async function selectChatGPTModel(
+  slug: string,
+  modelType: ChatGPTPlanModelType = 'KnowledgeQA',
+): Promise<ChatGPTModelSelection> {
+  const body = modelType === 'VLLM' ? { slug, model_type: 'VLLM' } : { slug }
   return payload<ChatGPTModelSelection>(
-    await post(`${endpoint}/models/select`, { slug }) as unknown as ChatGPTModelSelection,
+    await post(`${endpoint}/models/select`, body) as unknown as ChatGPTModelSelection,
   )
 }
 

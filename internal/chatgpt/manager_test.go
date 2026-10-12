@@ -99,8 +99,8 @@ func TestManagerOAuthRefreshModelsAndReturningIdentityFence(t *testing.T) {
 			}
 			writeJSON(t, w, map[string]any{"models": []any{
 				map[string]any{"slug": "gpt-z", "display_name": "Zulu", "visibility": "list"},
-				map[string]any{"slug": "gpt-a", "display_name": "Alpha", "visibility": "list"},
-				map[string]any{"slug": "hidden", "display_name": "Hidden", "visibility": "hidden"},
+				map[string]any{"slug": "gpt-a", "display_name": "Alpha", "visibility": "list", "input_modalities": []string{"text", "image"}},
+				map[string]any{"slug": "hidden", "display_name": "Hidden", "visibility": "hidden", "input_modalities": []string{"image"}},
 				map[string]any{"slug": "gpt-a", "display_name": "Duplicate", "visibility": "list"},
 			}})
 		default:
@@ -191,6 +191,9 @@ func TestManagerOAuthRefreshModelsAndReturningIdentityFence(t *testing.T) {
 	}
 	if len(models) != 2 || models[0].Slug != "gpt-a" || models[1].Slug != "gpt-z" {
 		t.Fatalf("unexpected models: %#v", models)
+	}
+	if !models[0].SupportsVision || models[1].SupportsVision {
+		t.Fatalf("unexpected vision capabilities: %#v", models)
 	}
 
 	state.Lock()

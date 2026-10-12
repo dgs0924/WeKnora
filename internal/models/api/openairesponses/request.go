@@ -259,6 +259,19 @@ func (c *Client) buildBody(messages []api.Message, opts *api.Options, stream boo
 			body[k] = v
 		}
 	}
+	if c.cfg.ChatGPTPlan {
+		// SIWC's Responses route has a narrower request contract than API-key
+		// inference. In particular VLM callers commonly set an output budget,
+		// which this route rejects rather than treating as a soft limit.
+		for _, key := range []string{
+			"background", "conversation", "max_output_tokens", "max_tool_calls",
+			"metadata", "moderation", "multi_agent", "prompt", "prompt_cache_retention",
+			"safety_identifier", "temperature", "top_logprobs", "top_p", "truncation",
+			"user", "previous_response_id",
+		} {
+			delete(body, key)
+		}
+	}
 	return body, nil
 }
 

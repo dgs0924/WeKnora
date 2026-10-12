@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/Tencent/WeKnora/internal/application/service"
 	"github.com/Tencent/WeKnora/internal/chatgpt"
@@ -22,12 +23,22 @@ type chatGPTAccounts interface {
 
 type ChatGPTHandler struct {
 	accounts chatGPTAccounts
-	manager  *chatgpt.Manager
 	models   interfaces.ModelRepository
 }
 
 func NewChatGPTHandler(accounts *chatgpt.Manager, models interfaces.ModelRepository) *ChatGPTHandler {
-	return &ChatGPTHandler{accounts: accounts, manager: accounts, models: models}
+	return &ChatGPTHandler{accounts: accounts, models: models}
+}
+
+func chatGPTModelType(raw string) (types.ModelType, error) {
+	switch types.ModelType(strings.TrimSpace(raw)) {
+	case "", types.ModelTypeKnowledgeQA:
+		return types.ModelTypeKnowledgeQA, nil
+	case types.ModelTypeVLLM:
+		return types.ModelTypeVLLM, nil
+	default:
+		return "", apperrors.NewBadRequestError("ChatGPT plan supports only KnowledgeQA and VLLM models")
+	}
 }
 
 func chatGPTIdentity(c *gin.Context) (string, bool) {
@@ -92,6 +103,11 @@ func (h *ChatGPTHandler) Models(c *gin.Context) {
 	if !ok {
 		return
 	}
+	modelType, err := chatGPTModelType(c.Query("model_type"))
+	if err != nil {
+		chatGPTError(c, err)
+		return
+	}
 	models, err := h.accounts.Models(c.Request.Context(), uid)
 	if err != nil {
 		chatGPTError(c, err)
@@ -99,7 +115,7 @@ func (h *ChatGPTHandler) Models(c *gin.Context) {
 	}
 	enabled := map[string]string{}
 	if tenantID, hasTenant := types.TenantIDFromContext(c.Request.Context()); hasTenant && tenantID != 0 && h.models != nil {
-		rows, err := h.models.List(c.Request.Context(), tenantID, types.ModelTypeKnowledgeQA, "")
+		rows, err := h.models.List(c.Request.Context(), tenantID, modelType, "")
 		if err != nil {
 			chatGPTError(c, err)
 			return
@@ -112,7 +128,10 @@ func (h *ChatGPTHandler) Models(c *gin.Context) {
 	}
 	result := make([]gin.H, 0, len(models))
 	for _, model := range models {
-		entry := gin.H{"slug": model.Slug, "display_name": model.DisplayName}
+		if modelType == types.ModelTypeVLLM && !model.SupportsVision {
+			continue
+		}
+		entry := gin.H{"slug": model.Slug, "display_name": model.DisplayName, "supports_vision": model.SupportsVision}
 		if id := enabled[model.Slug]; id != "" {
 			entry["id"] = id
 		}
@@ -137,13 +156,19 @@ func (h *ChatGPTHandler) SelectModel(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Slug string `json:"slug" binding:"required,max=200"`
+		Slug      string          `json:"slug" binding:"required,max=200"`
+		ModelType types.ModelType `json:"model_type"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Select a ChatGPT model"})
 		return
 	}
-	model, err := service.EnableChatGPTModel(c.Request.Context(), h.manager, h.models, req.Slug)
+	modelType, err := chatGPTModelType(string(req.ModelType))
+	if err != nil {
+		chatGPTError(c, err)
+		return
+	}
+	model, err := service.EnableChatGPTModelForType(c.Request.Context(), h.accounts, h.models, req.Slug, modelType)
 	if err != nil {
 		chatGPTError(c, err)
 		return

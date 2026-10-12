@@ -229,6 +229,34 @@ func TestChatGPTPlanForcesEphemeralStream(t *testing.T) {
 	}
 }
 
+func TestChatGPTPlanOmitsUnsupportedParametersWithoutChangingAPIKeyRequests(t *testing.T) {
+	c := newTestClient(t, nil, false)
+	c.cfg.Settings.ExtraBody = map[string]any{"metadata": map[string]string{"test": "value"}, "previous_response_id": "old-response"}
+	options := &api.Options{MaxCompletionTokens: 512, Temperature: 0.7, TopP: 0.9,
+		PromptCacheKey: "cache-key", CacheRetention: api.CacheRetentionLong}
+	messages := []api.Message{{Role: "system", Content: "Describe images briefly"}, {Role: "user", Content: "Describe", Images: []string{"data:image/png;base64,dGVzdA=="}}}
+	ordinary, err := c.BuildRequestBody(messages, options, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ordinary["max_output_tokens"] == nil || ordinary["temperature"] == nil {
+		t.Fatal("ordinary API options must remain supported")
+	}
+	c.cfg.ChatGPTPlan = true
+	body, err := c.BuildRequestBody(messages, options, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"max_output_tokens", "temperature", "top_p", "prompt_cache_retention", "metadata", "previous_response_id"} {
+		if _, exists := body[key]; exists {
+			t.Fatalf("plan request must omit %s", key)
+		}
+	}
+	if body["store"] != false || body["stream"] != true || body["instructions"] != "Describe images briefly" {
+		t.Fatalf("invalid plan request contract: %#v", body)
+	}
+}
+
 func TestBuildRequestBodyImagesAndAuto(t *testing.T) {
 	c := newTestClient(t, nil, true)
 	on := true

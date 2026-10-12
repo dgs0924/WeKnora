@@ -19,7 +19,7 @@ function fixture(id: string | undefined = 'owned-model') {
       if (path === '@/i18n') return { global: { t: (key: string) => key } }
       if (path === './modelUsage') return {}
       if (path === '../chatgpt') return {
-        selectChatGPTModel: async (slug: string) => { calls.push(['enable', slug]); return { model_id: id } },
+        selectChatGPTModel: async (slug: string, type: string) => { calls.push(['enable', slug, type]); return { model_id: id } },
       }
       if (path === '../../utils/request') return {
         get: async (url: string) => { calls.push(['get', url]); return { success: true, data: model } },
@@ -38,12 +38,21 @@ test('personal plan creation uses the account selection endpoint and returns the
     extra_config: { chatgpt_owner: 'another-user' },
   } })
   assert.equal(result, f.model)
-  assert.deepEqual(f.calls, [['enable', 'available-model'], ['get', '/api/v1/models/owned-model']])
+  assert.deepEqual(f.calls, [['enable', 'available-model', 'KnowledgeQA'], ['get', '/api/v1/models/owned-model']])
+})
+
+test('personal plan creation supports VLM and passes its type to the account selection endpoint', async () => {
+  const f = fixture()
+  const result = await f.create({ source: 'remote', type: 'VLLM', name: ' visual-model ', parameters: {
+    provider: 'chatgpt_plan', api_key: 'must-not-send', base_url: 'https://untrusted.example',
+  } })
+  assert.equal(result, f.model)
+  assert.deepEqual(f.calls, [['enable', 'visual-model', 'VLLM'], ['get', '/api/v1/models/owned-model']])
 })
 
 test('personal plan creation rejects unsupported types before requesting a model', async () => {
   const f = fixture()
-  for (const type of ['Embedding', 'Rerank', 'VLLM', 'ASR']) {
+  for (const type of ['Embedding', 'Rerank', 'ASR']) {
     await assert.rejects(f.create({ source: 'remote', type, name: 'model', parameters: { provider: 'chatgpt_plan' } }))
   }
   assert.equal(f.calls.length, 0)
@@ -52,7 +61,7 @@ test('personal plan creation rejects unsupported types before requesting a model
 test('a missing saved ID cannot appear as successful model creation', async () => {
   const f = fixture('')
   await assert.rejects(f.create({ source: 'remote', type: 'KnowledgeQA', name: 'model', parameters: { provider: 'chatgpt_plan' } }))
-  assert.deepEqual(f.calls, [['enable', 'model']])
+  assert.deepEqual(f.calls, [['enable', 'model', 'KnowledgeQA']])
 })
 
 test('ordinary OpenAI API models retain the existing creation path', async () => {

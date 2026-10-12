@@ -180,7 +180,7 @@
                 </span>
               </template>
               <t-option v-for="opt in providerOptions" :key="opt.value" :value="opt.value"
-                :label="providerDisplayLabel(opt)" :show-overflow-tooltip="false">
+                :label="providerDisplayLabel(opt)" :disabled="opt.disabled" :show-overflow-tooltip="false">
                 <div class="provider-option">
                   <img v-if="providerIcon(opt)" :src="providerIcon(opt)" class="provider-icon" alt="" />
                   <span v-else class="provider-icon provider-icon--placeholder" aria-hidden="true">
@@ -304,7 +304,7 @@
                 出现省略，tooltip 只会和已经命中的灰底打架。直接关掉。
               -->
               <t-option v-for="opt in providerOptions" :key="opt.value" :value="opt.value"
-                :label="providerDisplayLabel(opt)" :show-overflow-tooltip="false">
+                :label="providerDisplayLabel(opt)" :disabled="opt.disabled" :show-overflow-tooltip="false">
                 <div class="provider-option">
                   <img v-if="providerIcon(opt)" :src="providerIcon(opt)" class="provider-icon" alt="" />
                   <span v-else class="provider-icon provider-icon--placeholder" aria-hidden="true">
@@ -768,7 +768,7 @@ import CredentialResource, {
 import { shouldShowOllamaUnavailableTip } from '@/components/modelEditorSourceState'
 import { WEKNORA_CLOUD_PROVIDER, WKC_MODEL_KINDS, WKC_MODEL_NAME_BY_KIND } from '@/utils/weknoraCloudModels'
 import { docsUrl } from '@/utils/docsUrl'
-import { getChatGPTStatus, listChatGPTModels, type ChatGPTModel } from '@/api/chatgpt'
+import { getChatGPTStatus, listChatGPTModels, type ChatGPTModel, type ChatGPTPlanModelType } from '@/api/chatgpt'
 
 interface CustomHeaderItem {
   key: string
@@ -842,6 +842,8 @@ const CHATGPT_PLAN_PROVIDER = 'chatgpt_plan'
 // that branch, but retaining a valid fixed value keeps this editor compatible
 // with the shared form contract without exposing an editable connection URL.
 const CHATGPT_PLAN_BASE_URL = 'https://api.openai.com/v1'
+const chatGPTPlanSupportedModelType = (type: EditorModelType) => type === 'chat' || type === 'vllm'
+type ProviderOptionWithDisabled = ModelProviderOption & { disabled?: boolean }
 
 interface Props {
   visible: boolean
@@ -899,22 +901,27 @@ const loadProviders = async (force = false) => {
   }
 }
 
-const providerOptions = computed<ModelProviderOption[]>(() => {
+const providerOptions = computed<ProviderOptionWithDisabled[]>(() => {
   const options = providersStore.providersFor(activeModelType.value)
-  // This is deliberately a virtual provider: it exists only while adding a
-  // remote chat model, and its model list belongs to the current user's
-  // ChatGPT connection rather than the shared server catalog.
-  if (isEdit.value || activeModelType.value !== 'chat' || formData.value.source !== 'remote') return options
+  // This is deliberately a virtual provider: its model list belongs to the
+  // current user's ChatGPT connection rather than the shared server catalog.
+  // Show it for every remote model type so the picker explains its limits;
+  // only Responses-supported chat and VLM types can actually select it.
+  if (isEdit.value || formData.value.source !== 'remote') return options
   const openAI = providersStore.providerById('openai')
+  const supported = chatGPTPlanSupportedModelType(activeModelType.value)
   return [{
     value: CHATGPT_PLAN_PROVIDER,
     label: t('model.editor.chatgptPlan.provider') as string,
-    description: t('model.editor.chatgptPlan.providerDescription') as string,
+    description: t(supported
+      ? 'model.editor.chatgptPlan.providerDescription'
+      : 'model.editor.chatgptPlan.unsupportedProviderDescription') as string,
     icon: openAI?.icon,
-    defaultUrls: { chat: CHATGPT_PLAN_BASE_URL },
-    modelTypes: ['chat'],
+    defaultUrls: { chat: CHATGPT_PLAN_BASE_URL, vllm: CHATGPT_PLAN_BASE_URL },
+    modelTypes: ['chat', 'vllm'],
     models: [],
     order: -1,
+    disabled: !supported,
   }, ...options]
 })
 
@@ -1469,7 +1476,7 @@ const isCurrentChatGPTPlanRequest = (revision: number) =>
   revision === chatGPTPlanRequestRevision
   && props.visible
   && !isEdit.value
-  && activeModelType.value === 'chat'
+  && chatGPTPlanSupportedModelType(activeModelType.value)
   && formData.value.source === 'remote'
   && formData.value.provider === CHATGPT_PLAN_PROVIDER
 
@@ -1485,9 +1492,12 @@ const loadChatGPTPlanModels = async () => {
       chatGPTPlanState.value = 'unbound'
       return
     }
-    const models = await listChatGPTModels()
+    const modelType: ChatGPTPlanModelType = activeModelType.value === 'vllm' ? 'VLLM' : 'KnowledgeQA'
+    const models = await listChatGPTModels(modelType)
     if (!isCurrentChatGPTPlanRequest(revision)) return
-    chatGPTPlanModels.value = models.filter(model => !!model?.slug)
+    chatGPTPlanModels.value = models.filter(model => !!model?.slug && (
+      modelType !== 'VLLM' || model.supports_vision === true
+    ))
     chatGPTPlanState.value = chatGPTPlanModels.value.length > 0 ? 'ready' : 'empty'
   } catch (error) {
     if (!isCurrentChatGPTPlanRequest(revision)) return
@@ -1883,6 +1893,10 @@ const handleProviderChange = (value: string) => {
   // TDesign updates v-model before emitting `change`; assigning here as well
   // makes the transition atomic for programmatic callers and prevents the
   // account-catalog request from observing the previous provider.
+  if (value === CHATGPT_PLAN_PROVIDER && !chatGPTPlanSupportedModelType(activeModelType.value)) {
+    MessagePlugin.warning(t('model.editor.chatgptPlan.unsupportedModelType'))
+    return
+  }
   formData.value.provider = value
   const provider = providerOptions.value.find(opt => opt.value === value)
   if (value !== CHATGPT_PLAN_PROVIDER) invalidateChatGPTPlanLoad()

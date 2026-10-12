@@ -3159,12 +3159,14 @@ export default {
       providerDocs: '查看 {provider} 的模型文档',
       chatgptPlan: {
         provider: 'ChatGPT 套餐（我的账号）', providerDescription: '使用已绑定 ChatGPT Plus 或 Pro 账号可用的模型',
+        unsupportedProviderDescription: '套餐仅支持对话和视觉模型；Embedding、ReRank 和语音需配置其他服务商',
         title: 'ChatGPT 套餐模型', hint: '模型目录来自您已绑定的 ChatGPT 账号，无需填写 API Key 或 Base URL。',
         existingHint: '此模型由您的 ChatGPT 套餐连接管理。请在 ChatGPT 设置中管理连接和可用模型。',
         unbound: '请先绑定可用的 ChatGPT Plus 或 Pro 账号。', loadFailed: '无法加载 ChatGPT 可用模型。',
         empty: '该 ChatGPT 账号当前没有可用模型。', retry: '重试', refresh: '刷新目录',
         goToSettings: '前往 ChatGPT 设置', modelPlaceholder: '选择 ChatGPT 模型',
         modelHint: '只能选择当前账号授权的模型。', modelRequired: '请选择当前 ChatGPT 账号可用的模型。',
+        unsupportedModelType: 'ChatGPT 套餐仅支持对话和视觉模型。',
       },
       validation: {
         extraFieldRequired: '请填写 {name}',

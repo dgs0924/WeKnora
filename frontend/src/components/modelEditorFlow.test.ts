@@ -47,6 +47,7 @@ async function fixture(options: {
   const catalogRequests: Array<{ type?: string; force?: boolean }> = []
   let chatGPTStatusCalls = 0
   let chatGPTModelCalls = 0
+  const chatGPTModelTypes: string[] = []
   const loadedProviders = reactive<Record<string, any[]>>({})
   const providersStore = {
     ensureLoaded: async (type?: string, force?: boolean) => {
@@ -105,8 +106,9 @@ async function fixture(options: {
           chatGPTStatusCalls++
           return options.chatGPTStatus ? options.chatGPTStatus() : { connected: true, plan_enabled: true }
         },
-        listChatGPTModels: async () => {
+        listChatGPTModels: async (modelType?: string) => {
           chatGPTModelCalls++
+          chatGPTModelTypes.push(modelType || 'KnowledgeQA')
           return options.chatGPTModels ? options.chatGPTModels() : []
         },
       }
@@ -145,6 +147,7 @@ async function fixture(options: {
   return {
     vm, props, requests, saves, toasts, visibility, resolves, catalogEvents, catalogRequests,
     chatGPTStatusCalls: () => chatGPTStatusCalls, chatGPTModelCalls: () => chatGPTModelCalls,
+    chatGPTModelTypes: () => chatGPTModelTypes,
     close: () => app.unmount(),
   }
 }
@@ -159,7 +162,12 @@ for (const type of ['embedding', 'rerank', 'vllm', 'asr']) {
     try {
       assert.deepEqual(f.catalogRequests, [{ type, force: true }])
       assert.equal(f.vm.activeModelType, type)
-      assert.deepEqual(Array.from(f.vm.providerOptions, (p: any) => p.value), ['vendor'])
+      assert.deepEqual(
+        Array.from(f.vm.providerOptions, (p: any) => p.value).filter(value => value !== 'chatgpt_plan'),
+        ['vendor'],
+      )
+      const plan = f.vm.providerOptions.find((p: any) => p.value === 'chatgpt_plan')
+      assert.equal(!!plan?.disabled, !['vllm'].includes(type))
       f.vm.formData.provider = 'vendor'
       f.vm.formData.modelName = ''
       assert.deepEqual(Array.from(f.vm.catalogModelOptions, (m: any) => m.value), [`${type}-model`])
@@ -167,16 +175,24 @@ for (const type of ['embedding', 'rerank', 'vllm', 'asr']) {
   })
 }
 
-test('ChatGPT plan provider is offered only for new remote chat models', async () => {
-  const f = await fixture({ type: 'chat' })
-  try {
-    assert.equal(f.vm.providerOptions.some((item: any) => item.value === 'chatgpt_plan'), true)
-    f.vm.formData.source = 'local'
-    await nextTick()
-    assert.equal(f.vm.providerOptions.some((item: any) => item.value === 'chatgpt_plan'), false)
-    await f.vm.selectModelType('embedding')
-    assert.equal(f.vm.providerOptions.some((item: any) => item.value === 'chatgpt_plan'), false)
-  } finally { f.close() }
+test('ChatGPT plan provider is offered for every new remote model type, but only chat and VLM can select it', async () => {
+  for (const type of ['chat', 'vllm', 'embedding', 'rerank', 'asr'] as const) {
+    const f = await fixture({ type })
+    try {
+      const plan = f.vm.providerOptions.find((item: any) => item.value === 'chatgpt_plan')
+      assert.ok(plan, type)
+      assert.equal(!!plan.disabled, !['chat', 'vllm'].includes(type), type)
+      if (!['chat', 'vllm'].includes(type)) {
+        const initialProvider = f.vm.formData.provider
+        f.vm.handleProviderChange('chatgpt_plan')
+        assert.equal(f.vm.formData.provider, initialProvider)
+        assert.deepEqual(f.toasts, ['model.editor.chatgptPlan.unsupportedModelType'])
+      }
+      f.vm.formData.source = 'local'
+      await nextTick()
+      assert.equal(f.vm.providerOptions.some((item: any) => item.value === 'chatgpt_plan'), false)
+    } finally { f.close() }
+  }
 })
 
 test('ChatGPT plan picker saves only an account-authorized slug with the fixed shared URL', async () => {
@@ -199,6 +215,50 @@ test('ChatGPT plan picker saves only an account-authorized slug with the fixed s
     assert.equal(f.saves[0].modelName, 'gpt-6.1-sol')
     assert.equal(f.chatGPTStatusCalls(), 1)
     assert.equal(f.chatGPTModelCalls(), 1)
+  } finally { f.close() }
+})
+
+test('ChatGPT plan VLM picker requests visual models and excludes entries without image support', async () => {
+  const f = await fixture({
+    type: 'vllm',
+    chatGPTModels: async () => [
+      { slug: 'gpt-vision', display_name: 'GPT Vision', supports_vision: true },
+      { slug: 'text-only', display_name: 'Text only', supports_vision: false },
+    ],
+  })
+  try {
+    f.vm.handleProviderChange('chatgpt_plan')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await nextTick()
+    assert.equal(f.vm.chatGPTPlanState, 'ready')
+    assert.deepEqual(plain(f.vm.chatGPTPlanModels), [{ slug: 'gpt-vision', display_name: 'GPT Vision', supports_vision: true }])
+    assert.deepEqual(f.chatGPTModelTypes(), ['VLLM'])
+    f.vm.formData.modelName = 'gpt-vision'
+    await f.vm.handleConfirm()
+    assert.equal(f.saves.length, 1)
+    assert.equal(f.saves[0].modelType, 'vllm')
+    assert.equal(f.saves[0].provider, 'chatgpt_plan')
+    assert.equal(f.saves[0].baseUrl, 'https://api.openai.com/v1')
+    assert.equal(f.saves[0].apiKey, '')
+  } finally { f.close() }
+})
+
+test('changing from a selected ChatGPT plan type to an unsupported type clears the plan draft', async () => {
+  const f = await fixture({
+    type: 'chat',
+    chatGPTModels: async () => [{ slug: 'gpt-chat', display_name: 'GPT Chat' }],
+  })
+  try {
+    f.vm.handleProviderChange('chatgpt_plan')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    f.vm.formData.modelName = 'gpt-chat'
+    await f.vm.selectModelType('embedding')
+    assert.equal(f.vm.activeModelType, 'embedding')
+    assert.equal(f.vm.formData.provider, 'generic')
+    assert.equal(f.vm.formData.modelName, '')
+    assert.equal(f.vm.formData.baseUrl, '')
+    const plan = f.vm.providerOptions.find((item: any) => item.value === 'chatgpt_plan')
+    assert.equal(plan.disabled, true)
   } finally { f.close() }
 })
 

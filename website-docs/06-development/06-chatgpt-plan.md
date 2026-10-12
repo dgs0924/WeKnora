@@ -6,7 +6,7 @@
 
 1. 在个人设置中打开「ChatGPT 套餐」，点击 **Continue with ChatGPT**。
 2. 在系统浏览器中登录 ChatGPT，选择账号与工作空间并授权套餐使用。浏览器与本机 WeKnora 必须能访问同一个本机回调监听器。
-3. 授权成功后，可在「模型管理 → 添加模型」中选择「对话 → API → ChatGPT 套餐（我的账号）」，再从账号的可用模型中选择并保存，无需填写 API Key 或接口地址。也可以在「ChatGPT 套餐」设置页直接启用模型。启用后，在现有问答模型选择器中选择对应的 `ChatGPT · …` 模型。
+3. 授权成功后，可在「模型管理 → 添加模型」中选择「对话或视觉 → API → ChatGPT 套餐（我的账号）」，再从账号的可用模型中选择并保存，无需填写 API Key 或接口地址。也可以在「ChatGPT 套餐」设置页直接启用模型。启用后，在现有问答模型选择器中选择对应的 `ChatGPT · …` 模型。
 4. 断开连接会删除本机凭据并取消未完成的授权。要撤销 OpenAI 侧的应用访问或管理套餐用量，请同时前往 ChatGPT 设置。
 
 首次确认说明会提示该应用的合格请求使用个人套餐。额度耗尽、套餐不可用、授权过期或连接撤销时，应查看 ChatGPT 设置或重新授权；不会自动切换到付费 API Key。
@@ -47,9 +47,9 @@ ssh -N -L 127.0.0.1:1455:127.0.0.1:1455 user@your-server
 
 绑定归属于当前已登录的 WeKnora 个人账号。启用的模型仅在当前空间中对该用户可见，模型引用不包含 OAuth 凭据。每次调用重新检查用户身份并读取有效令牌；其他成员、API Key、匿名嵌入请求以及缺少个人身份的后台任务不能使用该连接。
 
-该接入仅提供问答模型，不提供 Embedding、Rerank、ASR 等套餐接口。知识库仍需配置独立的嵌入与重排模型。后台任务若不能保留原始个人调用身份，应继续使用独立 API 模型。
+该接入提供对话和视觉模型。视觉选择器只列出账号目录中明确声明支持图片输入的模型；同一个模型可分别启用为对话和视觉类型。Embedding、ReRank 与语音转写不属于当前套餐接口，选择这些类型时会说明需要独立 API 服务商。知识库仍需配置独立的嵌入与重排模型。后台任务若不能保留原始个人调用身份，应继续使用独立 API 模型。
 
-套餐调用固定使用公共 `https://api.openai.com/v1/responses`，每次设置 `store:false`、`stream:true`，只在收到 `response.completed` 后视为成功。非流式业务接口也会在后端聚合官方流式响应，失败、额度限制或中途断流不会被视为成功。
+套餐调用固定使用公共 `https://api.openai.com/v1/responses`，每次设置 `store:false`、`stream:true`，并过滤套餐接口不接受的输出上限、采样参数等字段，只在收到 `response.completed` 后视为成功。非流式业务接口也会在后端聚合官方流式响应，失败、额度限制或中途断流不会被视为成功。
 
 ## 官方参考
 
@@ -57,6 +57,7 @@ ssh -N -L 127.0.0.1:1455:127.0.0.1:1455 user@your-server
 - [动态注册与授权](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
 - [账号与刷新](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions)
 - [模型列表与 Responses 调用](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)
+- [套餐接口支持范围](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)
 - [自托管虚拟机](https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms)
 
 真实授权、账号模型权限和套餐额度只能在用户完成官方登录后验证。自动化测试使用隔离的 OAuth/JWKS/模型及流式响应，不代替真实账号验收。

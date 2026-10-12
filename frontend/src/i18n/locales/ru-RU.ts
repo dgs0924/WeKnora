@@ -3151,12 +3151,14 @@ export default {
       providerDocs: 'Документация моделей {provider}',
       chatgptPlan: {
         provider: 'Тариф ChatGPT (мой аккаунт)', providerDescription: 'Модели, доступные через подключенный аккаунт ChatGPT Plus или Pro',
+        unsupportedProviderDescription: 'Поддерживаются только диалоговые и визуальные модели; для Embedding, ReRank и речи настройте другого провайдера',
         title: 'Модель тарифа ChatGPT', hint: 'Каталог берется из подключенного аккаунта ChatGPT. API key и Base URL не требуются.',
         existingHint: 'Эта модель управляется подключением тарифа ChatGPT. Управляйте подключением и доступными моделями в настройках ChatGPT.',
         unbound: 'Сначала подключите доступный аккаунт ChatGPT Plus или Pro.', loadFailed: 'Не удалось загрузить доступные модели ChatGPT.',
         empty: 'Для этого аккаунта ChatGPT сейчас нет доступных моделей.', retry: 'Повторить', refresh: 'Обновить каталог',
         goToSettings: 'Открыть настройки ChatGPT', modelPlaceholder: 'Выберите модель ChatGPT',
         modelHint: 'Можно выбрать только модели, разрешенные для этого аккаунта.', modelRequired: 'Выберите модель, доступную текущему аккаунту ChatGPT.',
+        unsupportedModelType: 'Тариф ChatGPT поддерживает только диалоговые и визуальные модели.',
       },
       validation: {
         extraFieldRequired: 'Заполните {name}',

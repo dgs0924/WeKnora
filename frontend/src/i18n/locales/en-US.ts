@@ -5185,12 +5185,14 @@ export default {
       providerDocs: 'Read the {provider} model docs',
       chatgptPlan: {
         provider: 'ChatGPT plan (my account)', providerDescription: 'Models available through your connected ChatGPT Plus or Pro account',
+        unsupportedProviderDescription: 'Only chat and vision models are supported; configure another provider for Embedding, ReRank, or speech',
         title: 'ChatGPT plan model', hint: 'This catalog comes from your connected ChatGPT account. No API key or Base URL is required.',
         existingHint: 'This model is managed by your ChatGPT plan connection. Manage the connection and available models in ChatGPT settings.',
         unbound: 'Connect an available ChatGPT Plus or Pro account first.', loadFailed: 'Unable to load available ChatGPT models.',
         empty: 'This ChatGPT account has no available models right now.', retry: 'Retry', refresh: 'Refresh catalog',
         goToSettings: 'Go to ChatGPT settings', modelPlaceholder: 'Select a ChatGPT model',
         modelHint: 'Only models authorized for this account can be selected.', modelRequired: 'Select a model available to the current ChatGPT account.',
+        unsupportedModelType: 'The ChatGPT plan supports chat and vision models only.',
       },
     },
     builtinTag: 'Built-in'

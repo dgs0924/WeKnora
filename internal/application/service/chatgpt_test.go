@@ -2,11 +2,14 @@ package service
 
 import (
 	"context"
+	"strings"
+	"testing"
+
 	"github.com/Tencent/WeKnora/internal/chatgpt"
+	"github.com/Tencent/WeKnora/internal/models/chat"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func chatGPTTestContext(uid string) context.Context {
@@ -113,4 +116,111 @@ func TestEnableChatGPTModelRequiresAccountCatalogAndStoresNoCredentials(t *testi
 	_, err = EnableChatGPTModel(context.Background(), account, repo, "available")
 	require.Error(t, err)
 	require.Equal(t, 1, repo.creates)
+}
+
+type chatGPTCapabilityCatalogue struct{}
+
+func (*chatGPTCapabilityCatalogue) Models(context.Context, string) ([]chatgpt.Model, error) {
+	return []chatgpt.Model{
+		{Slug: "vision", DisplayName: "Vision", SupportsVision: true},
+		{Slug: "text", DisplayName: "Text"},
+	}, nil
+}
+
+func TestEnableChatGPTModelKeepsChatIDAndSeparatesVisionType(t *testing.T) {
+	repo := &chatGPTCreateRepo{}
+	ctx := chatGPTTestContext("alice")
+	chatModel, err := EnableChatGPTModelForType(ctx, &chatGPTCapabilityCatalogue{}, repo, "vision", types.ModelTypeKnowledgeQA)
+	require.NoError(t, err)
+	require.Equal(t, types.ModelTypeKnowledgeQA, chatModel.Type)
+	require.True(t, chatModel.Parameters.SupportsVision)
+	require.Equal(t, []string{"text", "image"}, chatModel.Parameters.Spec.Input)
+
+	// This exact ID seed shipped with the original chat-only integration and
+	// must remain stable when vision rows are added.
+	existing, err := EnableChatGPTModel(ctx, &chatGPTCapabilityCatalogue{}, repo, "vision")
+	require.NoError(t, err)
+	require.Equal(t, chatModel.ID, existing.ID)
+
+	visionModel, err := EnableChatGPTModelForType(ctx, &chatGPTCapabilityCatalogue{}, repo, "vision", types.ModelTypeVLLM)
+	require.NoError(t, err)
+	require.Equal(t, types.ModelTypeVLLM, visionModel.Type)
+	require.NotEqual(t, chatModel.ID, visionModel.ID)
+	require.True(t, visionModel.Parameters.SupportsVision)
+	require.Empty(t, visionModel.Parameters.APIKey)
+	require.Equal(t, 2, repo.creates)
+
+	_, err = EnableChatGPTModelForType(ctx, &chatGPTCapabilityCatalogue{}, repo, "text", types.ModelTypeVLLM)
+	require.Error(t, err)
+	_, err = EnableChatGPTModelForType(ctx, &chatGPTCapabilityCatalogue{}, repo, "vision", types.ModelTypeEmbedding)
+	require.Error(t, err)
+	require.Equal(t, 2, repo.creates)
+}
+
+type recordingVisionChat struct {
+	messages []chat.Message
+	calls    int
+}
+
+func (c *recordingVisionChat) Chat(_ context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
+	c.calls++
+	c.messages = messages
+	return &types.ChatResponse{Content: "described"}, nil
+}
+func (*recordingVisionChat) ChatStream(context.Context, []chat.Message, *chat.ChatOptions) (<-chan types.StreamResponse, error) {
+	return nil, nil
+}
+func (*recordingVisionChat) GetModelName() string { return "vision" }
+func (*recordingVisionChat) GetModelID() string   { return "vision-id" }
+
+func TestPersonalChatGPTVisionConvertsImagesAndRejectsInvalidInput(t *testing.T) {
+	inner := &recordingVisionChat{}
+	model := &personalChatGPTVLM{chat: inner}
+	png := []byte("\x89PNG\r\n\x1a\n" + strings.Repeat("\x00", 16))
+	content, err := model.Predict(t.Context(), [][]byte{png}, "read this")
+	require.NoError(t, err)
+	require.Equal(t, "described", content)
+	require.Equal(t, 1, inner.calls)
+	require.Len(t, inner.messages, 1)
+	require.Len(t, inner.messages[0].MultiContent, 2)
+	require.Equal(t, "text", inner.messages[0].MultiContent[0].Type)
+	require.Equal(t, "read this", inner.messages[0].MultiContent[0].Text)
+	image := inner.messages[0].MultiContent[1]
+	require.Equal(t, "image_url", image.Type)
+	require.NotNil(t, image.ImageURL)
+	require.True(t, strings.HasPrefix(image.ImageURL.URL, "data:image/png;base64,"))
+
+	_, err = model.Predict(t.Context(), [][]byte{[]byte("plain text")}, "read this")
+	require.Error(t, err)
+	require.Equal(t, 1, inner.calls, "invalid image must be rejected before any provider call")
+}
+
+func TestGetChatGPTVisionModelChecksTypeOwnerAndRefreshesCredentials(t *testing.T) {
+	tokens := &countingChatGPTTokens{}
+	row := chatGPTTestModel("alice")
+	row.Name = "vision"
+	row.Type = types.ModelTypeVLLM
+	row.Parameters.SupportsVision = true
+	svc := &modelService{repo: &chatGPTListRepo{rows: []*types.Model{row}}, chatGPT: tokens}
+
+	resolved, err := svc.GetVLMModel(chatGPTTestContext("alice"), row.ID)
+	require.NoError(t, err)
+	adapter := resolved.(*personalChatGPTVLM)
+	personal := adapter.chat.(*personalChatGPTChat)
+	_, err = personal.client(chatGPTTestContext("alice"))
+	require.NoError(t, err)
+	_, err = personal.client(chatGPTTestContext("alice"))
+	require.NoError(t, err)
+	require.Equal(t, 2, tokens.calls, "each use must resolve the current OAuth access token")
+
+	_, err = svc.GetVLMModel(chatGPTTestContext("bob"), row.ID)
+	require.Error(t, err)
+	require.Equal(t, 2, tokens.calls, "another user must not read the owner's credentials")
+	_, err = svc.GetChatModel(chatGPTTestContext("alice"), row.ID)
+	require.Error(t, err, "a VLLM row must not be used through the chat-model selector")
+
+	row.Type = types.ModelTypeKnowledgeQA
+	row.Parameters.SupportsVision = false
+	_, err = svc.GetVLMModel(chatGPTTestContext("alice"), row.ID)
+	require.Error(t, err, "a chat-only row must not be used as a VLLM")
 }

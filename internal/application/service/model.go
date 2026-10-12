@@ -8,7 +8,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/Tencent/WeKnora/internal/chatgpt"
 	apperrors "github.com/Tencent/WeKnora/internal/errors"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/models/asr"
@@ -28,7 +27,7 @@ var ErrModelNotFound = errors.New("model not found")
 
 // modelService implements the model service interface
 type modelService struct {
-	chatGPT       *chatgpt.Manager
+	chatGPT       chatGPTTokenSource
 	repo          interfaces.ModelRepository
 	kbRepo        interfaces.KnowledgeBaseRepository
 	agentRepo     interfaces.CustomAgentRepository
@@ -740,6 +739,9 @@ func (s *modelService) GetChatModel(ctx context.Context, modelId string) (chat.C
 		if !ownsChatGPTModel(ctx, model) {
 			return nil, apperrors.NewForbiddenError("ChatGPT model belongs to another account")
 		}
+		if model.Type != types.ModelTypeKnowledgeQA {
+			return nil, apperrors.NewBadRequestError("selected ChatGPT model is not a chat model")
+		}
 		return &personalChatGPTChat{accounts: s.chatGPT, owner: model.Parameters.ExtraConfig[chatGPTOwnerKey], name: model.Name, id: model.ID}, nil
 	}
 	logger.Infof(ctx, "Getting chat model: %s, source: %s", model.Name, model.Source)
@@ -777,6 +779,24 @@ func (s *modelService) GetVLMModel(ctx context.Context, modelId string) (vlm.VLM
 
 	if model == nil {
 		return nil, ErrModelNotFound
+	}
+	if isChatGPTModel(model) {
+		if s.chatGPT == nil {
+			return nil, errors.New("ChatGPT connection is unavailable")
+		}
+		if !ownsChatGPTModel(ctx, model) {
+			return nil, apperrors.NewForbiddenError("ChatGPT model belongs to another account")
+		}
+		if model.Type != types.ModelTypeVLLM || !model.Parameters.SupportsVision {
+			return nil, apperrors.NewBadRequestError("selected ChatGPT model does not support vision")
+		}
+		personal := &personalChatGPTChat{
+			accounts: s.chatGPT,
+			owner:    model.Parameters.ExtraConfig[chatGPTOwnerKey],
+			name:     model.Name,
+			id:       model.ID,
+		}
+		return &personalChatGPTVLM{chat: personal}, nil
 	}
 
 	logger.Infof(ctx, "Getting VLM model: %s, source: %s", model.Name, model.Source)

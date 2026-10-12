@@ -56,6 +56,7 @@ type Status struct {
 }
 
 type Model struct {
-	Slug        string `json:"slug"`
-	DisplayName string `json:"display_name"`
+	Slug           string `json:"slug"`
+	DisplayName    string `json:"display_name"`
+	SupportsVision bool   `json:"supports_vision"`
 }

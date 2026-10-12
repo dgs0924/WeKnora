@@ -385,29 +385,40 @@ func (m *Manager) Models(ctx context.Context, userID string) ([]Model, error) {
 		return nil, errors.New("ChatGPT model catalog is unavailable")
 	}
 	var rows []struct {
-		Slug        string `json:"slug"`
-		DisplayName string `json:"display_name"`
-		Visibility  string `json:"visibility"`
+		Slug            string   `json:"slug"`
+		DisplayName     string   `json:"display_name"`
+		Visibility      string   `json:"visibility"`
+		InputModalities []string `json:"input_modalities"`
 	}
 	if err := json.Unmarshal(response.Models, &rows); err != nil {
 		return nil, errors.New("ChatGPT model catalog is unavailable")
 	}
-	seen := make(map[string]struct{})
+	seen := make(map[string]int)
 	models := make([]Model, 0, len(rows))
 	for _, row := range rows {
 		slug := strings.TrimSpace(row.Slug)
 		if row.Visibility != "list" || slug == "" || len(slug) > 512 {
 			continue
 		}
-		if _, exists := seen[slug]; exists {
+		supportsVision := false
+		for _, modality := range row.InputModalities {
+			if strings.EqualFold(strings.TrimSpace(modality), "image") {
+				supportsVision = true
+				break
+			}
+		}
+		if index, exists := seen[slug]; exists {
+			// A duplicate catalog row must never erase a capability already
+			// advertised for the same model slug.
+			models[index].SupportsVision = models[index].SupportsVision || supportsVision
 			continue
 		}
-		seen[slug] = struct{}{}
 		name := strings.TrimSpace(row.DisplayName)
 		if name == "" || len(name) > 512 {
 			name = slug
 		}
-		models = append(models, Model{Slug: slug, DisplayName: name})
+		seen[slug] = len(models)
+		models = append(models, Model{Slug: slug, DisplayName: name, SupportsVision: supportsVision})
 	}
 	sort.Slice(models, func(i, j int) bool {
 		if models[i].DisplayName == models[j].DisplayName {

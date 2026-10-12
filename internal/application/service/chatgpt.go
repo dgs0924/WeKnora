@@ -60,42 +60,66 @@ type chatGPTModelCatalogue interface {
 }
 
 func EnableChatGPTModel(ctx context.Context, accounts chatGPTModelCatalogue, repo interfaces.ModelRepository, slug string) (*types.Model, error) {
+	return EnableChatGPTModelForType(ctx, accounts, repo, slug, types.ModelTypeKnowledgeQA)
+}
+
+// EnableChatGPTModelForType creates an independent personal row for each
+// supported use. Keeping the historical KnowledgeQA ID seed unchanged avoids
+// breaking existing selections, while VLLM gets its own stable ID.
+func EnableChatGPTModelForType(ctx context.Context, accounts chatGPTModelCatalogue, repo interfaces.ModelRepository,
+	slug string, modelType types.ModelType,
+) (*types.Model, error) {
 	uid, err := ChatGPTUser(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if modelType != types.ModelTypeKnowledgeQA && modelType != types.ModelTypeVLLM {
+		return nil, apperrors.NewBadRequestError("ChatGPT plan supports only chat and vision models")
 	}
 	slug = strings.TrimSpace(slug)
 	models, err := accounts.Models(ctx, uid)
 	if err != nil {
 		return nil, err
 	}
-	label := ""
-	for _, m := range models {
-		if m.Slug == slug {
-			label = m.DisplayName
+	var selected *chatgpt.Model
+	for i := range models {
+		if models[i].Slug == slug {
+			selected = &models[i]
 			break
 		}
 	}
-	if label == "" {
+	if selected == nil {
 		return nil, apperrors.NewBadRequestError("select an available ChatGPT model")
 	}
+	if modelType == types.ModelTypeVLLM && !selected.SupportsVision {
+		return nil, apperrors.NewBadRequestError("selected ChatGPT model does not support image input")
+	}
 	tenantID := types.MustTenantIDFromContext(ctx)
-	id := uuid.NewSHA1(uuid.NameSpaceURL, []byte(fmt.Sprintf("weknora:chatgpt:%d:%s:%s", tenantID, uid, slug))).String()
-	rows, err := repo.List(ctx, tenantID, types.ModelTypeKnowledgeQA, "")
+	idSeed := fmt.Sprintf("weknora:chatgpt:%d:%s:%s", tenantID, uid, slug)
+	if modelType != types.ModelTypeKnowledgeQA {
+		idSeed += ":" + string(modelType)
+	}
+	id := uuid.NewSHA1(uuid.NameSpaceURL, []byte(idSeed)).String()
+	rows, err := repo.List(ctx, tenantID, modelType, "")
 	if err != nil {
 		return nil, err
 	}
 	for _, m := range rows {
-		if m.ID == id && isChatGPTModel(m) && ownsChatGPTModel(ctx, m) {
+		if m.ID == id && m.Type == modelType && isChatGPTModel(m) && ownsChatGPTModel(ctx, m) {
 			return m, nil
 		}
 	}
-	m := &types.Model{ID: id, TenantID: tenantID, Name: slug, DisplayName: "ChatGPT · " + label,
-		Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceRemote, Status: types.ModelStatusActive,
+	input := []string{"text"}
+	if selected.SupportsVision {
+		input = append(input, "image")
+	}
+	m := &types.Model{ID: id, TenantID: tenantID, Name: slug, DisplayName: "ChatGPT · " + selected.DisplayName,
+		Type: modelType, Source: types.ModelSourceRemote, Status: types.ModelStatusActive,
 		Description: "Uses the owner's authorized ChatGPT plan for interactive requests", ManagedBy: "chatgpt",
 		Parameters: types.ModelParameters{Provider: "openai", BaseURL: "https://api.openai.com/v1",
-			ExtraConfig: map[string]string{chatGPTPlanKey: "true", chatGPTOwnerKey: uid},
-			Spec:        &types.ModelSpecOverride{API: string(api.APIOpenAIResponses)}},
+			SupportsVision: selected.SupportsVision,
+			ExtraConfig:    map[string]string{chatGPTPlanKey: "true", chatGPTOwnerKey: uid},
+			Spec:           &types.ModelSpecOverride{API: string(api.APIOpenAIResponses), Input: input}},
 	}
 	if err := repo.Create(ctx, m); err != nil {
 		return nil, err
