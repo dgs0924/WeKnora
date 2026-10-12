@@ -3,6 +3,7 @@ package codex
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,6 +28,9 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	case "stream", "flood", "schema":
 		codexHelperStream()
+		os.Exit(0)
+	case "vision":
+		codexHelperVision()
 		os.Exit(0)
 	case "incomplete":
 		codexHelperIncomplete()
@@ -195,14 +199,15 @@ func TestDynamicToolNotificationIsNotExecutable(t *testing.T) {
 }
 
 func TestMultipartTextSurvivesHistoryAndLatestInput(t *testing.T) {
-	history, input, instructions, err := buildTurn([]chat.Message{
+	history, input, instructions, _, err := buildTurn([]chat.Message{
 		{Role: "system", MultiContent: []chat.MessageContentPart{{Type: "text", Text: "Application policy"}}},
 		{Role: "user", MultiContent: []chat.MessageContentPart{{Type: "text", Text: "first"}, {Type: "text", Text: " part"}}},
 		{Role: "assistant", Content: "reply"},
 		{Role: "user", MultiContent: []chat.MessageContentPart{{Type: "text", Text: "next"}}},
 	})
-	if err != nil || input != "next" || !strings.Contains(instructions, "Application policy") {
-		t.Fatalf("lost multipart content: input=%q instructions=%q error=%v", input, instructions, err)
+	rawInput, _ := json.Marshal(input)
+	if err != nil || !strings.Contains(string(rawInput), "next") || !strings.Contains(instructions, "Application policy") {
+		t.Fatalf("lost multipart content: input=%s instructions=%q error=%v", rawInput, instructions, err)
 	}
 	raw, _ := json.Marshal(history)
 	if !strings.Contains(string(raw), "first part") {
@@ -211,7 +216,7 @@ func TestMultipartTextSurvivesHistoryAndLatestInput(t *testing.T) {
 }
 
 func TestBuildTurnPreservesToolRoundTrip(t *testing.T) {
-	history, input, _, err := buildTurn([]chat.Message{
+	history, input, _, _, err := buildTurn([]chat.Message{
 		{Role: "user", Content: "look this up"},
 		{Role: "assistant", ToolCalls: []chat.ToolCall{{ID: "call-1", Type: "function", Function: chat.FunctionCall{Name: "search", Arguments: `{"q":"x"}`}}}},
 		{Role: "tool", ToolCallID: "call-1", Name: "search", Content: "result"},
@@ -219,11 +224,69 @@ func TestBuildTurnPreservesToolRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if input == "" || len(history) != 3 {
-		t.Fatalf("input=%q history=%#v", input, history)
+	if len(input) == 0 || len(history) != 3 {
+		t.Fatalf("input=%#v history=%#v", input, history)
 	}
 	if history[1].(map[string]interface{})["type"] != "function_call" || history[2].(map[string]interface{})["type"] != "function_call_output" {
 		t.Fatalf("tool history lost: %#v", history)
+	}
+}
+
+func TestBuildTurnEncodesVisionForCurrentTurnAndHistory(t *testing.T) {
+	image := "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlSUL4AAAAASUVORK5CYII="
+	history, input, _, _, err := buildTurn([]chat.Message{
+		{Role: "user", MultiContent: []chat.MessageContentPart{{Type: "text", Text: "earlier"}, {Type: "image_url", ImageURL: &chat.ImageURL{URL: image}}}},
+		{Role: "assistant", ToolCalls: []chat.ToolCall{{ID: "call-1", Type: "function", Function: chat.FunctionCall{Name: "lookup", Arguments: `{}`}}}},
+		{Role: "tool", ToolCallID: "call-1", Content: "result"},
+		{Role: "user", MultiContent: []chat.MessageContentPart{{Type: "text", Text: "latest"}, {Type: "image_url", ImageURL: &chat.ImageURL{URL: image}}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawHistory, _ := json.Marshal(history)
+	rawInput, _ := json.Marshal(input)
+	if !strings.Contains(string(rawHistory), `"input_image"`) || !strings.Contains(string(rawHistory), `"function_call_output"`) {
+		t.Fatalf("history lost image or tool exchange: %s", rawHistory)
+	}
+	if !strings.Contains(string(rawInput), `"type":"image"`) || !strings.Contains(string(rawInput), `"latest"`) {
+		t.Fatalf("current input=%s", rawInput)
+	}
+}
+
+func TestBuildTurnRejectsUnsafeOrOversizedVisionInput(t *testing.T) {
+	_, _, _, _, err := buildTurn([]chat.Message{{Role: "user", Images: []string{"https://example.test/image.png"}}})
+	if err == nil {
+		t.Fatal("remote image URL must be rejected")
+	}
+	over := "data:image/png;base64," + base64.StdEncoding.EncodeToString(make([]byte, maxCodexImageBytes+1))
+	_, _, _, _, err = buildTurn([]chat.Message{{Role: "user", Images: []string{over}}})
+	if err == nil {
+		t.Fatal("oversized image must be rejected")
+	}
+}
+
+func TestVisionRPCPreservesHistoryAndCurrentImages(t *testing.T) {
+	r := testRuntime(t, "vision")
+	image := "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlSUL4AAAAASUVORK5CYII="
+	got, err := r.Chat("gpt-test", "id").Chat(context.Background(), []chat.Message{
+		{Role: "user", MultiContent: []chat.MessageContentPart{{Type: "text", Text: "earlier"}, {Type: "image_url", ImageURL: &chat.ImageURL{URL: image}}}},
+		{Role: "assistant", ToolCalls: []chat.ToolCall{{ID: "call-1", Type: "function", Function: chat.FunctionCall{Name: "lookup", Arguments: `{}`}}}},
+		{Role: "tool", ToolCallID: "call-1", Content: "result"},
+		{Role: "user", MultiContent: []chat.MessageContentPart{{Type: "text", Text: "latest"}, {Type: "image_url", ImageURL: &chat.ImageURL{URL: image}}}},
+	}, nil)
+	if err != nil || got.Content != "vision ok" {
+		t.Fatalf("response=%#v err=%v", got, err)
+	}
+}
+
+func TestVisionRPCOutputLimitsStayBoundedAndLeaveTextDefault(t *testing.T) {
+	stdout, line := visionRPCOutputLimits(defaultMaxOutput, 0)
+	if stdout != defaultMaxOutput || line != maxLineSize {
+		t.Fatalf("text limits stdout=%d line=%d", stdout, line)
+	}
+	stdout, line = visionRPCOutputLimits(defaultMaxOutput, maxCodexImageTotal)
+	if line <= maxLineSize || line > maxVisionRPCLineBytes || stdout <= line || stdout > maxVisionRPCOutputBytes {
+		t.Fatalf("vision limits stdout=%d line=%d", stdout, line)
 	}
 }
 
@@ -382,6 +445,33 @@ func codexHelperDynamic() {
 	if reply.Success {
 		os.Exit(44)
 	}
+}
+
+func codexHelperVision() {
+	in := bufio.NewScanner(os.Stdin)
+	out := bufio.NewWriter(os.Stdout)
+	defer out.Flush()
+	var req rpcEnvelope
+	readRPC(in, &req)
+	writeRPC(out, map[string]any{"jsonrpc": "2.0", "id": json.RawMessage(req.ID), "result": map[string]any{}})
+	readRPC(in, &req) // initialized
+	readRPC(in, &req)
+	if req.Method != "thread/start" {
+		os.Exit(50)
+	}
+	writeRPC(out, map[string]any{"jsonrpc": "2.0", "id": json.RawMessage(req.ID), "result": map[string]any{"thread": map[string]any{"id": "thread"}}})
+	readRPC(in, &req)
+	if req.Method != "thread/inject_items" || !strings.Contains(string(req.Params), `"input_image"`) || !strings.Contains(string(req.Params), `"function_call_output"`) {
+		os.Exit(51)
+	}
+	writeRPC(out, map[string]any{"jsonrpc": "2.0", "id": json.RawMessage(req.ID), "result": map[string]any{}})
+	readRPC(in, &req)
+	if req.Method != "turn/start" || !strings.Contains(string(req.Params), `"type":"image"`) || !strings.Contains(string(req.Params), `"latest"`) {
+		os.Exit(52)
+	}
+	writeRPC(out, map[string]any{"jsonrpc": "2.0", "id": json.RawMessage(req.ID), "result": map[string]any{"turn": map[string]any{"id": "turn"}}})
+	writeRPC(out, map[string]any{"jsonrpc": "2.0", "method": "item/agentMessage/delta", "params": map[string]any{"delta": "vision ok"}})
+	writeRPC(out, map[string]any{"jsonrpc": "2.0", "method": "turn/completed", "params": map[string]any{"turn": map[string]any{"status": "completed"}}})
 }
 
 func readRPC(in *bufio.Scanner, dst *rpcEnvelope) {

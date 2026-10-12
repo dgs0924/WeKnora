@@ -36,6 +36,7 @@ export default {
     usageTitle: '绑定用途', usageHint: 'WeKnora 不会在此页面显示或保存您的 ChatGPT 密码。不再使用时，可在这里断开连接，或前往 ChatGPT 管理您的套餐。', welcomeTitle: 'ChatGPT 已就绪', welcomeDescription: '请在下方启用模型，然后在 WeKnora 现有模型选择器中选用它处理您个人发起的交互请求。', welcomeConfirm: '知道了',
   },
   codexSettings: {
+    chatModel: '对话', visionModel: '视觉', capabilityHint: '该通道支持对话和视觉模型，不支持向量、重排或语音模型。',
     usageCardTitle: '套餐用量', usageCardHint: '这是整个服务器 Codex 账号共享的用量，不是 WeKnora 独占或按用户统计。', usageUnavailable: '套餐用量暂不可用', usageUsed: '已用 {percent}%', usageRemaining: '剩余 {percent}%', usageResetsAt: '重置：{time}', usageUpdatedAt: '更新于：{time}',
     shortDescription: '管理服务器已登录 Codex 账号的模型与用户授权。',
     title: '服务器 Codex 账号', description: '使用已在服务器登录的 Codex 账号启用对话模型，无需浏览器回调或输入密码。', connectionTitle: '服务器登录状态', connected: '服务器已登录', notConnected: '服务器未登录', connectedDescription: '此账号仅供当前绑定用户发起的对话请求使用。', notConnectedDescription: '请在服务器上完成 Codex CLI 登录后刷新状态。', connectedAccount: '服务器账号：{email}', plan: '套餐：{plan}', statusLoadFailed: '无法读取服务器 Codex 状态，请重试。', modelsLoading: '正在加载服务器 Codex 模型...', modelsEmpty: '该服务器账号暂无可用的 Codex 模型。', modelsLoadFailed: '加载服务器 Codex 模型失败', enableModel: '在 WeKnora 中启用', modelEnabled: '已启用', modelEnabledSuccess: 'Codex 模型已在 WeKnora 中启用', modelEnableFailed: '启用 Codex 模型失败', usageTitle: '使用范围', usageHint: '服务器 Codex 凭据不会显示或导出。该通道仅支持对话模型，不支持向量、重排或图像模型。', grantsTitle: '用户模型授权', grantsDescription: '选择活跃用户，再勾选其可使用的已启用 Codex 模型。授权跨空间生效；未授权用户不会看到这些模型。', grantsUsageWarning: '已授权的请求将消耗服务器 Codex 账号的套餐额度。保存后新请求立即按最新授权执行，进行中的请求不保证停止。', grantsLoading: '正在加载用户授权...', grantsLoadFailed: '加载用户授权失败', grantMember: '用户', grantMemberPlaceholder: '请选择要授权的用户', grantsMembersEmpty: '没有其他可授权的活跃用户。', grantModel: '允许使用', grantsSave: '保存授权', grantsSaved: '用户模型授权已保存', grantSaveFailed: '保存用户模型授权失败',
@@ -3175,7 +3176,7 @@ export default {
         modelHint: '只能选择当前账号授权的模型。', modelRequired: '请选择当前 ChatGPT 账号可用的模型。',
         unsupportedModelType: 'ChatGPT 套餐仅支持对话和视觉模型。',
       },
-      codexCli: { channelPersonal: 'ChatGPT（个人账号）', accountUnsupported: '账号授权支持个人账号的对话、视觉模型及服务器账号的对话模型。', sourceLabel: '账号授权', title: '账号授权模型', channelLabel: '授权渠道', channelChatGPTServer: 'ChatGPT（服务器账号）', hint: '使用服务器已登录账号的对话模型，无需 API Key 或 Base URL。', existingHint: '此模型由服务器账号管理。', existingReadonly: '已启用的服务器模型不能在这里修改。', unavailable: '服务器账号当前不可用，无法读取模型目录。', loadFailed: '加载服务器模型目录失败。', empty: '服务器账号没有可用模型。', modelPlaceholder: '选择服务器模型', modelHint: '当前仅支持 ChatGPT（服务器账号）对话模型。', modelRequired: '请选择服务器账号可用的模型。', unsupportedModelType: '账号授权当前仅支持对话模型。' },
+      codexCli: { channelPersonal: 'ChatGPT（个人账号）', accountUnsupported: '账号授权支持对话和视觉模型，不支持向量、重排或语音模型。', sourceLabel: '账号授权', title: '账号授权模型', channelLabel: '授权渠道', channelChatGPTServer: 'ChatGPT（服务器账号）', hint: '使用服务器已登录账号的对话或视觉模型，无需 API Key 或 Base URL。', existingHint: '此模型由服务器账号管理。', existingReadonly: '已启用的服务器模型不能在这里修改。', unavailable: '服务器账号当前不可用，无法读取模型目录。', loadFailed: '加载服务器模型目录失败。', empty: '服务器账号没有可用模型。', modelPlaceholder: '选择服务器模型', modelHint: '仅显示当前模型类型可用的服务器模型。', modelRequired: '请选择服务器账号可用的模型。', unsupportedModelType: '账号授权支持对话和视觉模型，不支持向量、重排或语音模型。' },
       validation: {
         extraFieldRequired: '请填写 {name}',
         modelNameRequired: '请输入模型名称',

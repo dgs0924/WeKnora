@@ -133,3 +133,41 @@ func TestCodexGlobalGrantAccessAndRevocation(t *testing.T) {
 	_, err = client.client(codexGrantContext("alice"))
 	require.Error(t, err, "cached model client must re-check a revoked grant")
 }
+
+func TestCodexVLMRequiresSeparateVisionRowAndCurrentGrant(t *testing.T) {
+	t.Setenv("WEKNORA_CODEX_OWNER_USER_ID", "owner")
+	vision := codexTestModel("owner")
+	vision.ID, vision.Name, vision.TenantID = "vision", "gpt-vision", 99
+	vision.Type, vision.Parameters.SupportsVision = types.ModelTypeVLLM, true
+	grants := &codexGrantTestRepo{allowed: vision}
+	users := &codexUserTestRepo{rows: map[string]*types.User{"owner": {ID: "owner", IsActive: true}, "alice": {ID: "alice", IsActive: true}}}
+	runtime, err := codex.New(codex.Config{Binary: "/bin/true", Home: "/tmp", WorkDir: "/tmp"})
+	require.NoError(t, err)
+	svc := &modelService{repo: grants, codex: runtime, codexOwner: "owner", codexUsers: users}
+	resolved, err := svc.GetVLMModel(codexGrantContext("alice"), vision.ID)
+	require.NoError(t, err)
+	require.IsType(t, &personalChatGPTVLM{}, resolved)
+	// A text row with the same provider connection is never a vision model.
+	text := codexTestModel("owner")
+	text.ID = "text"
+	text.Parameters.SupportsVision = false
+	grants.allowed = text
+	_, err = svc.GetVLMModel(codexGrantContext("alice"), text.ID)
+	require.Error(t, err)
+	vision.Parameters.SupportsVision = false
+	grants.allowed = vision
+	_, err = svc.GetVLMModel(codexGrantContext("alice"), vision.ID)
+	require.Error(t, err)
+	vision.Parameters.SupportsVision = true
+	// Revocation is observed by a newly resolved VLM and its nested chat.
+	grants.allowed = nil
+	_, err = svc.GetVLMModel(codexGrantContext("alice"), vision.ID)
+	require.Error(t, err)
+}
+
+func TestCodexVisionModelIDIsIndependentFromLegacyChatID(t *testing.T) {
+	chatID := codexModelID(7, "owner", "gpt-test", types.ModelTypeKnowledgeQA)
+	visionID := codexModelID(7, "owner", "gpt-test", types.ModelTypeVLLM)
+	require.NotEqual(t, chatID, visionID)
+	require.Equal(t, chatID, codexModelID(7, "owner", "gpt-test", types.ModelTypeKnowledgeQA))
+}

@@ -101,7 +101,10 @@ func canUseCodexModel(ctx context.Context, m *types.Model, configuredOwner strin
 	if configuredOwner == "" {
 		configuredOwner = strings.TrimSpace(os.Getenv("WEKNORA_CODEX_OWNER_USER_ID"))
 	}
-	if !isCodexModel(m) || m.ManagedBy != "codex" || m.IsBuiltin || m.Type != types.ModelTypeKnowledgeQA || m.Status != types.ModelStatusActive || configuredOwner == "" || m.Parameters.ExtraConfig[codexOwnerKey] != configuredOwner {
+	if !isCodexModel(m) || m.ManagedBy != "codex" || m.IsBuiltin || (m.Type != types.ModelTypeKnowledgeQA && m.Type != types.ModelTypeVLLM) || m.Status != types.ModelStatusActive || configuredOwner == "" || m.Parameters.ExtraConfig[codexOwnerKey] != configuredOwner {
+		return false
+	}
+	if m.Type == types.ModelTypeVLLM && !m.Parameters.SupportsVision {
 		return false
 	}
 	uid, err := ChatGPTUser(ctx)
@@ -144,12 +147,18 @@ func NewModelServiceWithChatGPTAndCodex(repo interfaces.ModelRepository, kb inte
 // EnableCodexModel persists only a model reference. The logged-in Codex CLI
 // state remains outside the database and cannot be forged from model fields.
 func EnableCodexModel(ctx context.Context, connection *CodexConnection, repo interfaces.ModelRepository, slug string) (*types.Model, error) {
+	return EnableCodexModelForType(ctx, connection, repo, slug, types.ModelTypeKnowledgeQA)
+}
+func EnableCodexModelForType(ctx context.Context, connection *CodexConnection, repo interfaces.ModelRepository, slug string, modelType types.ModelType) (*types.Model, error) {
 	if connection == nil || connection.Runtime == nil {
 		return nil, apperrors.NewForbiddenError("Codex plan is not enabled on this server")
 	}
 	uid, err := CodexUser(ctx, connection.Owner)
 	if err != nil {
 		return nil, err
+	}
+	if modelType != types.ModelTypeKnowledgeQA && modelType != types.ModelTypeVLLM {
+		return nil, apperrors.NewBadRequestError("Codex plan supports only chat and vision models")
 	}
 	status, err := connection.Runtime.Status(ctx)
 	if err != nil {
@@ -176,17 +185,27 @@ func EnableCodexModel(ctx context.Context, connection *CodexConnection, repo int
 	if selected == nil {
 		return nil, apperrors.NewBadRequestError("select an available Codex model")
 	}
+	supportsVision := false
+	for _, modality := range selected.InputModalities {
+		if modality == "image" {
+			supportsVision = true
+		}
+	}
+	if modelType == types.ModelTypeVLLM && !supportsVision {
+		return nil, apperrors.NewBadRequestError("selected Codex model does not support image input")
+	}
 	tenantID := types.MustTenantIDFromContext(ctx)
 	name := selected.Name
 	if name == "" {
 		name = selected.ID
 	}
-	rows, err := repo.List(ctx, tenantID, types.ModelTypeKnowledgeQA, "")
+	id := codexModelID(tenantID, uid, name, modelType)
+	rows, err := repo.List(ctx, tenantID, modelType, "")
 	if err != nil {
 		return nil, err
 	}
 	for _, row := range rows {
-		if row.Name == name && isCodexModel(row) && ownsCodexModel(ctx, row) {
+		if isCodexModel(row) && ownsCodexModel(ctx, row) && (row.ID == id || (modelType == types.ModelTypeKnowledgeQA && row.Name == name)) {
 			return row, nil
 		}
 	}
@@ -196,16 +215,28 @@ func EnableCodexModel(ctx context.Context, connection *CodexConnection, repo int
 	}
 	// A removed model is soft-deleted. A fresh ID allows the owner to enable
 	// it again without colliding with the historical row's primary key.
-	m := &types.Model{ID: uuid.NewString(), TenantID: tenantID, Name: name, DisplayName: "Codex · " + display,
-		Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceRemote, Status: types.ModelStatusActive,
+	input := []string{"text"}
+	if supportsVision {
+		input = append(input, "image")
+	}
+	m := &types.Model{ID: id, TenantID: tenantID, Name: name, DisplayName: "Codex · " + display,
+		Type: modelType, Source: types.ModelSourceRemote, Status: types.ModelStatusActive,
 		Description: "Uses the server's configured Codex account for the designated personal user", ManagedBy: "codex",
-		Parameters: types.ModelParameters{Provider: "openai", ExtraConfig: map[string]string{codexPlanKey: "true", codexOwnerKey: uid},
-			Spec: &types.ModelSpecOverride{API: string(api.APIOpenAIResponses), Input: []string{"text"}}},
+		Parameters: types.ModelParameters{Provider: "openai", SupportsVision: supportsVision, ExtraConfig: map[string]string{codexPlanKey: "true", codexOwnerKey: uid},
+			Spec: &types.ModelSpecOverride{API: string(api.APIOpenAIResponses), Input: input}},
 	}
 	if err := repo.Create(ctx, m); err != nil {
 		return nil, err
 	}
 	return m, nil
+}
+
+func codexModelID(tenantID uint64, owner, slug string, modelType types.ModelType) string {
+	seed := fmt.Sprintf("weknora:codex:%d:%s:%s", tenantID, owner, slug)
+	if modelType != types.ModelTypeKnowledgeQA {
+		seed += ":" + string(modelType)
+	}
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte(seed)).String()
 }
 
 type personalCodexChat struct {

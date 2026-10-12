@@ -31,7 +31,7 @@ func (r *Runtime) Usage(ctx context.Context) (Usage, error) {
 		return Usage{}, err
 	}
 	defer r.release()
-	c, err := r.start(ctx)
+	c, err := r.start(ctx, 0)
 	if err != nil {
 		return Usage{}, err
 	}

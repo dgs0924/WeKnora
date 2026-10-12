@@ -114,7 +114,7 @@ func TestCodexUsageRejectsOtherUsersAndAPIKeys(t *testing.T) {
 
 func TestCodexGrantManagementAuthorizationAndEmptyACL(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	repo := &codexHandlerRepo{models: []*types.Model{{ID: "m1", Name: "gpt", DisplayName: "Codex · GPT"}}}
+	repo := &codexHandlerRepo{models: []*types.Model{{ID: "m1", Name: "gpt", DisplayName: "Codex · GPT", Type: types.ModelTypeKnowledgeQA}, {ID: "m2", Name: "gpt", DisplayName: "Codex · GPT Vision", Type: types.ModelTypeVLLM}}}
 	users := &codexHandlerUsers{users: map[string]*types.User{"target": {ID: "target", IsActive: true}}}
 	h := &CodexHandler{connection: &service.CodexConnection{Owner: "owner"}, models: repo, users: users}
 	for _, tc := range []struct {
@@ -136,6 +136,7 @@ func TestCodexGrantManagementAuthorizationAndEmptyACL(t *testing.T) {
 			require.Equal(t, tc.code, w.Code)
 			if tc.code == http.StatusOK {
 				require.Contains(t, w.Body.String(), `"user_ids":[]`)
+				require.Contains(t, w.Body.String(), `"type":"VLLM"`)
 			}
 		})
 	}

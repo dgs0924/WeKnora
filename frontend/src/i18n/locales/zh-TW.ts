@@ -36,6 +36,7 @@ export default {
     usageTitle: '連結用途', usageHint: 'WeKnora 不會在此頁面顯示或儲存您的 ChatGPT 密碼。不再使用時，可在這裡中斷連結，或前往 ChatGPT 管理訂閱。', welcomeTitle: 'ChatGPT 已就緒', welcomeDescription: '請在下方啟用模型，然後在 WeKnora 現有模型選擇器中選用它處理您個人發起的互動請求。', welcomeConfirm: '知道了',
   },
   codexSettings: {
+    chatModel: '對話', visionModel: '視覺', capabilityHint: '此連線支援對話與視覺模型，不支援向量、重排或語音模型。',
     usageCardTitle: '方案用量', usageCardHint: '這是整個伺服器 Codex 帳號共享的用量，不是 WeKnora 專屬或按使用者統計。', usageUnavailable: '方案用量暫時不可用', usageUsed: '已用 {percent}%', usageRemaining: '剩餘 {percent}%', usageResetsAt: '重置：{time}', usageUpdatedAt: '更新於：{time}',
     shortDescription: '管理伺服器已登入 Codex 帳號的模型與使用者授權。',
     title: '伺服器 Codex 帳號', description: '使用已在伺服器登入的 Codex 帳號啟用對話模型，無需瀏覽器回呼或輸入密碼。', connectionTitle: '伺服器登入狀態', connected: '已在伺服器登入', notConnected: '尚未在伺服器登入', connectedDescription: '此帳號只供目前綁定使用者發起的對話請求使用。', notConnectedDescription: '請先在伺服器完成 Codex CLI 登入，再重新整理狀態。', connectedAccount: '伺服器帳號：{email}', plan: '訂閱：{plan}', statusLoadFailed: '無法讀取伺服器 Codex 狀態，請重試。', modelsLoading: '正在載入伺服器 Codex 模型...', modelsEmpty: '此伺服器帳號沒有可用的 Codex 模型。', modelsLoadFailed: '載入伺服器 Codex 模型失敗', enableModel: '在 WeKnora 中啟用', modelEnabled: '已啟用', modelEnabledSuccess: 'Codex 模型已在 WeKnora 中啟用', modelEnableFailed: '啟用 Codex 模型失敗', usageTitle: '使用範圍', usageHint: '伺服器 Codex 憑據不會顯示或匯出。此連線僅支援對話模型，不支援向量、重排或圖像模型。', grantsTitle: '成員模型授權', grantsDescription: '選擇目前空間成員，再勾選其可使用的已啟用 Codex 模型。', grantsUsageWarning: '已授權的請求將消耗伺服器 Codex 帳號的方案額度。', grantsLoading: '正在載入成員授權...', grantsLoadFailed: '載入成員授權失敗', grantMember: '空間成員', grantMemberPlaceholder: '請選擇要授權的成員', grantsMembersEmpty: '目前空間沒有其他可授權的活躍成員。', grantModel: '允許使用', grantsSave: '儲存授權', grantsSaved: '成員模型授權已儲存', grantSaveFailed: '儲存成員模型授權失敗',
@@ -3175,7 +3176,7 @@ export default {
         modelHint: '只能選擇目前帳號授權的模型。', modelRequired: '請選擇目前 ChatGPT 帳號可用的模型。',
         unsupportedModelType: 'ChatGPT 方案只支援對話與視覺模型。',
       },
-      codexCli: { channelPersonal: 'ChatGPT（個人帳號）', accountUnsupported: '帳號授權支援個人帳號的對話、視覺模型及伺服器帳號的對話模型。', sourceLabel: '帳號授權', title: '帳號授權模型', channelLabel: '授權渠道', channelChatGPTServer: 'ChatGPT（伺服器帳號）', hint: '使用伺服器已登入帳號的對話模型。', existingHint: '此模型由伺服器帳號管理。', existingReadonly: '已啟用的伺服器模型不能在這裡修改。', unavailable: '伺服器帳號目前不可用。', loadFailed: '無法載入伺服器模型目錄。', empty: '伺服器帳號沒有可用模型。', modelPlaceholder: '選擇伺服器模型', modelHint: '目前僅支援 ChatGPT（伺服器帳號）對話模型。', modelRequired: '請選擇伺服器可用模型。', unsupportedModelType: '帳號授權目前僅支援對話模型。' },
+      codexCli: { channelPersonal: 'ChatGPT（個人帳號）', accountUnsupported: '帳號授權支援對話和視覺模型，不支援向量、重排或語音模型。', sourceLabel: '帳號授權', title: '帳號授權模型', channelLabel: '授權渠道', channelChatGPTServer: 'ChatGPT（伺服器帳號）', hint: '使用伺服器已登入帳號的對話或視覺模型，無需 API Key 或 Base URL。', existingHint: '此模型由伺服器帳號管理。', existingReadonly: '已啟用的伺服器模型不能在這裡修改。', unavailable: '伺服器帳號目前不可用。', loadFailed: '無法載入伺服器模型目錄。', empty: '伺服器帳號沒有可用模型。', modelPlaceholder: '選擇伺服器模型', modelHint: '僅顯示目前模型類型可用的伺服器模型。', modelRequired: '請選擇伺服器可用模型。', unsupportedModelType: '帳號授權支援對話和視覺模型，不支援向量、重排或語音模型。' },
       validation: {
         extraFieldRequired: '請填寫 {name}',
         modelNameRequired: '請輸入模型名稱',

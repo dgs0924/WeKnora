@@ -855,10 +855,30 @@ func (s *modelService) GetVLMModel(ctx context.Context, modelId string) (vlm.VLM
 	}
 
 	if model == nil {
-		return nil, ErrModelNotFound
+		if grants, ok := s.repo.(interfaces.CodexGrantRepository); ok {
+			if uid, present := types.UserIDFromContext(ctx); present {
+				model, err = grants.GetGrantedCodexModel(ctx, s.codexOwner, uid, modelId)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+		if model == nil {
+			return nil, ErrModelNotFound
+		}
 	}
 	if isCodexModel(model) {
-		return nil, apperrors.NewBadRequestError("Codex plan models do not support vision")
+		if model.Type != types.ModelTypeVLLM || !model.Parameters.SupportsVision {
+			return nil, apperrors.NewBadRequestError("selected Codex model does not support vision")
+		}
+		if s.codex == nil {
+			return nil, errors.New("Codex connection is unavailable")
+		}
+		if !s.canUseCodexModel(ctx, model) {
+			return nil, apperrors.NewForbiddenError("Codex model belongs to another account")
+		}
+		personal := &personalCodexChat{runtime: s.codex, owner: s.codexOwner, name: model.Name, id: model.ID, repo: s.repo, users: s.codexUsers}
+		return &personalChatGPTVLM{chat: personal}, nil
 	}
 	if isChatGPTModel(model) {
 		if s.chatGPT == nil {

@@ -90,10 +90,11 @@ func (h *CodexHandler) Usage(c *gin.Context) {
 }
 
 type codexGrantModelResponse struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	DisplayName string   `json:"display_name"`
-	UserIDs     []string `json:"user_ids"`
+	ID          string          `json:"id"`
+	Name        string          `json:"name"`
+	DisplayName string          `json:"display_name"`
+	Type        types.ModelType `json:"type"`
+	UserIDs     []string        `json:"user_ids"`
 }
 
 func (h *CodexHandler) grantModels(c *gin.Context, owner string) ([]codexGrantModelResponse, bool) {
@@ -129,7 +130,7 @@ func (h *CodexHandler) grantModels(c *gin.Context, owner string) ([]codexGrantMo
 		if ids == nil {
 			ids = []string{}
 		}
-		result = append(result, codexGrantModelResponse{ID: row.ID, Name: row.Name, DisplayName: row.DisplayName, UserIDs: ids})
+		result = append(result, codexGrantModelResponse{ID: row.ID, Name: row.Name, DisplayName: row.DisplayName, Type: row.Type, UserIDs: ids})
 	}
 	return result, true
 }
@@ -266,8 +267,12 @@ func (h *CodexHandler) Models(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if modelType := strings.TrimSpace(c.Query("model_type")); modelType != "" && modelType != string(types.ModelTypeKnowledgeQA) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Codex plan supports only KnowledgeQA models"})
+	modelType := types.ModelType(strings.TrimSpace(c.Query("type")))
+	if modelType == "" {
+		modelType = types.ModelTypeKnowledgeQA
+	}
+	if modelType != types.ModelTypeKnowledgeQA && modelType != types.ModelTypeVLLM {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Codex plan supports only chat and vision models"})
 		return
 	}
 	if h.connection.Runtime == nil {
@@ -290,13 +295,13 @@ func (h *CodexHandler) Models(c *gin.Context) {
 	}
 	enabled := map[string]string{}
 	if tenantID, present := types.TenantIDFromContext(c.Request.Context()); present && tenantID != 0 && h.models != nil {
-		rows, err := h.models.List(c.Request.Context(), tenantID, types.ModelTypeKnowledgeQA, "")
+		rows, err := h.models.List(c.Request.Context(), tenantID, modelType, "")
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "Codex models are unavailable"})
 			return
 		}
 		for _, row := range rows {
-			if !row.IsBuiltin && row.Parameters.ExtraConfig["codex_plan"] == "true" && row.Parameters.ExtraConfig["codex_owner"] == uid {
+			if row.Type == modelType && !row.IsBuiltin && row.Parameters.ExtraConfig["codex_plan"] == "true" && row.Parameters.ExtraConfig["codex_owner"] == uid {
 				enabled[row.Name] = row.ID
 			}
 		}
@@ -307,7 +312,16 @@ func (h *CodexHandler) Models(c *gin.Context) {
 		if slug == "" {
 			slug = model.Name
 		}
-		entry := gin.H{"slug": slug, "display_name": model.DisplayName}
+		supportsVision := false
+		for _, modality := range model.InputModalities {
+			if modality == "image" {
+				supportsVision = true
+			}
+		}
+		if modelType == types.ModelTypeVLLM && !supportsVision {
+			continue
+		}
+		entry := gin.H{"slug": slug, "display_name": model.DisplayName, "supports_vision": supportsVision}
 		if entry["display_name"] == "" {
 			entry["display_name"] = model.Name
 		}
@@ -324,13 +338,17 @@ func (h *CodexHandler) SelectModel(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Slug string `json:"slug" binding:"required,max=200"`
+		Slug string          `json:"slug" binding:"required,max=200"`
+		Type types.ModelType `json:"type"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Select a Codex model"})
 		return
 	}
-	model, err := service.EnableCodexModel(c.Request.Context(), h.connection, h.models, req.Slug)
+	if req.Type == "" {
+		req.Type = types.ModelTypeKnowledgeQA
+	}
+	model, err := service.EnableCodexModelForType(c.Request.Context(), h.connection, h.models, req.Slug, req.Type)
 	if err != nil {
 		if app, ok := apperrors.IsAppError(err); ok && app.HTTPCode < 500 {
 			c.JSON(app.HTTPCode, gin.H{"error": app.Message})

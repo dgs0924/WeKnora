@@ -23,7 +23,7 @@ func (r *modelRepository) ReplaceCodexGrantsForUser(ctx context.Context, owner, 
 	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var rows []*types.Model
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("managed_by = ? AND is_builtin = ? AND type = ? AND status = ?", "codex", false, types.ModelTypeKnowledgeQA, types.ModelStatusActive).Find(&rows).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("managed_by = ? AND is_builtin = ? AND type IN ? AND status = ?", "codex", false, []types.ModelType{types.ModelTypeKnowledgeQA, types.ModelTypeVLLM}, types.ModelStatusActive).Find(&rows).Error; err != nil {
 			return err
 		}
 		found := make(map[string]bool, len(selected))
@@ -52,12 +52,12 @@ func (r *modelRepository) ReplaceCodexGrantsForUser(ctx context.Context, owner, 
 }
 
 func isPersistedCodexModel(m *types.Model, owner string) bool {
-	return m != nil && m.ManagedBy == "codex" && !m.IsBuiltin && m.Type == types.ModelTypeKnowledgeQA && m.Status == types.ModelStatusActive && m.Parameters.ExtraConfig["codex_plan"] == "true" && m.Parameters.ExtraConfig["codex_owner"] == owner
+	return m != nil && m.ManagedBy == "codex" && !m.IsBuiltin && (m.Type == types.ModelTypeKnowledgeQA || (m.Type == types.ModelTypeVLLM && m.Parameters.SupportsVision)) && m.Status == types.ModelStatusActive && m.Parameters.ExtraConfig["codex_plan"] == "true" && m.Parameters.ExtraConfig["codex_owner"] == owner
 }
 
 func (r *modelRepository) ListCodexModelsForOwner(ctx context.Context, owner string) ([]*types.Model, error) {
 	var rows []*types.Model
-	err := r.db.WithContext(ctx).Where("managed_by = ? AND is_builtin = ? AND type = ? AND status = ?", "codex", false, types.ModelTypeKnowledgeQA, types.ModelStatusActive).Find(&rows).Error
+	err := r.db.WithContext(ctx).Where("managed_by = ? AND is_builtin = ? AND type IN ? AND status = ?", "codex", false, []types.ModelType{types.ModelTypeKnowledgeQA, types.ModelTypeVLLM}, types.ModelStatusActive).Find(&rows).Error
 	if err != nil {
 		return nil, err
 	}

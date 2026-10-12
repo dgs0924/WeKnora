@@ -17,6 +17,7 @@ export interface CodexModelGrant {
   id: string
   name: string
   display_name: string
+  type?: 'KnowledgeQA' | 'VLLM'
   user_ids: string[]
 }
 
@@ -89,6 +90,7 @@ export interface CodexModel {
   display_name: string
   /** The corresponding WeKnora model ID after it has been enabled. */
   id?: string
+  supports_vision?: boolean
 }
 
 export interface CodexModelSelection { model_id?: string }
@@ -114,13 +116,16 @@ export async function getCodexUsage(): Promise<CodexUsage> {
   return normalizeCodexUsage(payload<CodexUsage>(await get(`${endpoint}/usage`) as unknown as CodexUsage))
 }
 
-export async function listCodexModels(): Promise<CodexModel[]> {
-  const response = payload<CodexModelsResponse>(await get(`${endpoint}/models`) as unknown as CodexModelsResponse)
+export type CodexModelType = 'KnowledgeQA' | 'VLLM'
+export async function listCodexModels(modelType: CodexModelType = 'KnowledgeQA'): Promise<CodexModel[]> {
+  const query = modelType === 'VLLM' ? '?type=VLLM' : ''
+  const response = payload<CodexModelsResponse>(await get(`${endpoint}/models${query}`) as unknown as CodexModelsResponse)
   return Array.isArray(response.models) ? response.models : []
 }
 
-export async function selectCodexModel(slug: string): Promise<CodexModelSelection> {
-  return payload<CodexModelSelection>(await post(`${endpoint}/models/select`, { slug }) as unknown as CodexModelSelection)
+export async function selectCodexModel(slug: string, modelType: CodexModelType = 'KnowledgeQA'): Promise<CodexModelSelection> {
+  const body = modelType === 'VLLM' ? { slug, type: 'VLLM' } : { slug }
+  return payload<CodexModelSelection>(await post(`${endpoint}/models/select`, body) as unknown as CodexModelSelection)
 }
 
 /** Lists grants owned by the signed-in server Codex account. */

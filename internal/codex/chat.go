@@ -2,11 +2,20 @@ package codex
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"strings"
+
 	"github.com/Tencent/WeKnora/internal/models/chat"
 	"github.com/Tencent/WeKnora/internal/types"
-	"strings"
+)
+
+const (
+	maxCodexImageCount = 20
+	maxCodexImageBytes = 20 << 20
+	maxCodexImageTotal = 50 << 20
 )
 
 func (r *Runtime) Chat(name, id string) chat.Chat {
@@ -59,7 +68,7 @@ func (c *modelChat) Chat(ctx context.Context, ms []chat.Message, o *chat.ChatOpt
 	return &r, nil
 }
 func (c *modelChat) ChatStream(ctx context.Context, ms []chat.Message, o *chat.ChatOptions) (<-chan types.StreamResponse, error) {
-	history, input, ins, e := buildTurn(ms)
+	history, input, ins, visionBytes, e := buildTurn(ms)
 	if e != nil {
 		return nil, e
 	}
@@ -84,7 +93,7 @@ func (c *modelChat) ChatStream(ctx context.Context, ms []chat.Message, o *chat.C
 		defer cancel()
 		defer c.r.release()
 		defer close(out)
-		x, e := c.r.start(callCtx)
+		x, e := c.r.start(callCtx, visionBytes)
 		if e != nil {
 			emitError(callCtx, out, e)
 			return
@@ -163,9 +172,16 @@ func validateTools(o *chat.ChatOptions) ([]map[string]any, map[string]struct{}, 
 	}
 	return dynamicTools(o.Tools), allowed, nil
 }
-func buildTurn(ms []chat.Message) ([]any, string, string, error) {
+
+// buildTurn converts WeKnora's protocol-neutral messages into the two shapes
+// expected by the Codex app-server: Turn input uses {type:"image",url:...},
+// while injected Responses history uses input_image parts. Only data image URIs
+// are accepted here. The application layer turns trusted upload bytes into data
+// URIs, so this adapter never reads a local path or fetches a remote URL.
+func buildTurn(ms []chat.Message) ([]any, []any, string, int, error) {
 	var history []any
 	var sy []string
+	imageBudget := &codexImageBudget{}
 	last := -1
 	for i, m := range ms {
 		if m.Role != "system" {
@@ -173,46 +189,60 @@ func buildTurn(ms []chat.Message) ([]any, string, string, error) {
 		}
 	}
 	if last < 0 {
-		return nil, "", "", fmt.Errorf("Codex chat needs a message")
+		return nil, nil, "", 0, fmt.Errorf("Codex chat needs a message")
 	}
-	input := "Continue from the supplied conversation."
+	input := []any{map[string]any{"type": "text", "text": "Continue from the supplied conversation."}}
 	for i, m := range ms {
-		if len(m.Images) > 0 {
-			return nil, "", "", fmt.Errorf("Codex app-server adapter does not support image inputs")
-		}
-		for _, p := range m.MultiContent {
-			if p.Type != "text" {
-				return nil, "", "", fmt.Errorf("Codex app-server adapter supports only text content parts")
-			}
-			m.Content += p.Text
+		text, images, err := codexMessageContent(m, imageBudget)
+		if err != nil {
+			return nil, nil, "", 0, err
 		}
 		if m.Role == "system" {
-			sy = append(sy, m.Content)
+			if len(images) > 0 {
+				return nil, nil, "", 0, fmt.Errorf("Codex system messages cannot contain images")
+			}
+			sy = append(sy, text)
 			continue
 		}
 		if i == last && m.Role == "user" && len(m.ToolCalls) == 0 {
-			input = m.Content
+			input = []any{map[string]any{"type": "text", "text": text}}
+			for _, image := range images {
+				input = append(input, map[string]any{"type": "image", "url": image})
+			}
 			continue
 		}
 		switch m.Role {
 		case "user", "assistant":
-			if m.Content != "" {
+			if len(images) > 0 && m.Role != "user" {
+				return nil, nil, "", 0, fmt.Errorf("Codex assistant messages cannot contain images")
+			}
+			if text != "" || len(images) > 0 {
 				kind := "input_text"
 				if m.Role == "assistant" {
 					kind = "output_text"
 				}
-				history = append(history, map[string]any{"type": "message", "role": m.Role, "content": []any{map[string]any{"type": kind, "text": m.Content}}})
+				content := make([]any, 0, 1+len(images))
+				if text != "" {
+					content = append(content, map[string]any{"type": kind, "text": text})
+				}
+				for _, image := range images {
+					content = append(content, map[string]any{"type": "input_image", "image_url": image})
+				}
+				history = append(history, map[string]any{"type": "message", "role": m.Role, "content": content})
 			}
 			for _, tc := range m.ToolCalls {
 				history = append(history, map[string]any{"type": "function_call", "call_id": tc.ID, "name": tc.Function.Name, "arguments": tc.Function.Arguments})
 			}
 		case "tool":
 			if m.ToolCallID == "" {
-				return nil, "", "", fmt.Errorf("tool result has no tool_call_id")
+				return nil, nil, "", 0, fmt.Errorf("tool result has no tool_call_id")
 			}
-			history = append(history, map[string]any{"type": "function_call_output", "call_id": m.ToolCallID, "output": m.Content})
+			if len(images) > 0 {
+				return nil, nil, "", 0, fmt.Errorf("Codex tool messages cannot contain images")
+			}
+			history = append(history, map[string]any{"type": "function_call_output", "call_id": m.ToolCallID, "output": text})
 		default:
-			return nil, "", "", fmt.Errorf("unsupported Codex message role %q", m.Role)
+			return nil, nil, "", 0, fmt.Errorf("unsupported Codex message role %q", m.Role)
 		}
 	}
 	ins := ""
@@ -221,14 +251,88 @@ func buildTurn(ms []chat.Message) ([]any, string, string, error) {
 	}
 	// This is explanatory only: the process configuration removes the native
 	// tools, and WeKnora executes only its own declared dynamic tools.
-	ins += `You are a text-only model for WeKnora. Never execute commands, inspect files, use built-in tools, browse, access MCP, create subagents, or request permissions. You may request the explicitly provided dynamic tools; WeKnora will execute them. Answer only from the supplied conversation and tool results.`
-	return history, input, ins, nil
+	ins += `You are a WeKnora assistant. You may reason about only the supplied conversation text, images, and tool results. Never execute commands, inspect files, use built-in tools, browse, access MCP, create subagents, or request permissions. You may request only explicitly provided dynamic tools; WeKnora will execute them.`
+	return history, input, ins, imageBudget.total, nil
 }
-func (c *rpcClient) turn(ctx context.Context, tid, input string, o *chat.ChatOptions, allowed map[string]struct{}, out chan<- types.StreamResponse) error {
+
+type codexImageBudget struct {
+	count int
+	total int
+}
+
+func codexMessageContent(m chat.Message, budget *codexImageBudget) (string, []string, error) {
+	text := m.Content
+	images := append([]string(nil), m.Images...)
+	for _, part := range m.MultiContent {
+		switch part.Type {
+		case "text":
+			text += part.Text
+		case "image_url":
+			if part.ImageURL == nil {
+				return "", nil, fmt.Errorf("Codex image content is missing its URL")
+			}
+			images = append(images, part.ImageURL.URL)
+		default:
+			return "", nil, fmt.Errorf("unsupported Codex content part %q", part.Type)
+		}
+	}
+	for _, image := range images {
+		if err := budget.add(image); err != nil {
+			return "", nil, err
+		}
+	}
+	return text, images, nil
+}
+
+func (b *codexImageBudget) add(raw string) error {
+	const prefix = "data:image/"
+	if !strings.HasPrefix(raw, prefix) {
+		return fmt.Errorf("Codex images must be data:image base64 URIs")
+	}
+	comma := strings.IndexByte(raw, ',')
+	if comma < len(prefix)+1 || !strings.HasSuffix(strings.ToLower(raw[:comma]), ";base64") {
+		return fmt.Errorf("Codex images must use base64 data URIs")
+	}
+	encoded := raw[comma+1:]
+	if encoded == "" || base64.StdEncoding.DecodedLen(len(encoded)) > maxCodexImageBytes {
+		return fmt.Errorf("Codex image exceeds the 20 MiB limit")
+	}
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil || len(decoded) == 0 {
+		return fmt.Errorf("Codex image data URI is invalid")
+	}
+	if len(decoded) > maxCodexImageBytes {
+		return fmt.Errorf("Codex image exceeds the 20 MiB limit")
+	}
+	declaredMIME := strings.ToLower(raw[len("data:"):strings.IndexByte(raw, ';')])
+	if !isCodexImageMIME(declaredMIME) || http.DetectContentType(decoded) != declaredMIME {
+		return fmt.Errorf("Codex images must be valid PNG, JPEG, GIF, or WebP data")
+	}
+	b.count++
+	b.total += len(decoded)
+	if b.count > maxCodexImageCount {
+		return fmt.Errorf("Codex accepts at most %d images per request", maxCodexImageCount)
+	}
+	if b.total > maxCodexImageTotal {
+		return fmt.Errorf("Codex images exceed the 50 MiB total limit")
+	}
+	return nil
+}
+
+func isCodexImageMIME(mime string) bool {
+	switch mime {
+	case "image/png", "image/jpeg", "image/gif", "image/webp":
+		return true
+	default:
+		return false
+	}
+}
+
+func (c *rpcClient) turn(ctx context.Context, tid string, input []any, o *chat.ChatOptions, allowed map[string]struct{}, out chan<- types.StreamResponse) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.nextID++
-	p := map[string]any{"threadId": tid, "input": []map[string]any{{"type": "text", "text": input}}, "approvalPolicy": "untrusted", "cwd": c.cfg.WorkDir}
+	p := map[string]any{"threadId": tid, "input": input, "approvalPolicy": "untrusted", "cwd": c.cfg.WorkDir}
 	if o != nil {
 		if len(o.Format) > 0 {
 			var schema map[string]any

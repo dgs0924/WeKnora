@@ -262,6 +262,9 @@
                   <div>
                     <div class="chatgpt-settings__model-name">{{ model.display_name || model.name }}</div>
                     <code>{{ model.name }}</code>
+                    <t-tag v-if="model.type" size="small" variant="light" class="chatgpt-settings__grant-type">
+                      {{ model.type === 'VLLM' ? t('codexSettings.visionModel') : t('codexSettings.chatModel') }}
+                    </t-tag>
                   </div>
                   <t-checkbox
                     :model-value="selectedCodexGrantIDs.includes(model.id)"
@@ -281,7 +284,7 @@
           </section>
 
         <t-alert theme="info" class="chatgpt-settings__usage" :title="t('codexSettings.usageTitle')">
-          {{ t('codexSettings.usageHint') }}
+          {{ t('codexSettings.capabilityHint') }}
         </t-alert>
         </template>
       </section>

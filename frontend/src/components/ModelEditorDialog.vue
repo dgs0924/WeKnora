@@ -177,7 +177,7 @@
       <template v-if="formData.source === 'remote'">
         <section v-if="isChatGPTPlanEditor" class="setting-drawer__section">
           <h4 class="setting-drawer__section-title">{{ $t('model.editor.sectionProvider') }}</h4>
-          <div class="form-item"><label class="form-label">{{ $t('model.editor.codexCli.channelLabel') }}</label><t-select :model-value="'personal'" :disabled="isChatGPTPlanExisting" @change="(v: 'personal' | 'server') => changeAccountAuthorizationChannel(v)"><t-option value="personal" :label="$t('model.editor.codexCli.channelPersonal')" /><t-option value="server" :label="$t('model.editor.codexCli.channelChatGPTServer')" :disabled="activeModelType === 'vllm'" /></t-select></div>
+          <div class="form-item"><label class="form-label">{{ $t('model.editor.codexCli.channelLabel') }}</label><t-select :model-value="'personal'" :disabled="isChatGPTPlanExisting" @change="(v: 'personal' | 'server') => changeAccountAuthorizationChannel(v)"><t-option value="personal" :label="$t('model.editor.codexCli.channelPersonal')" /><t-option value="server" :label="$t('model.editor.codexCli.channelChatGPTServer')" /></t-select></div>
 
           <div class="chatgpt-plan-hint">
             <t-icon name="chat" class="chatgpt-plan-hint__icon" />
@@ -1539,7 +1539,7 @@ const invalidateCodexEditorLoad = () => {
 
 const isCurrentCodexEditorRequest = (revision: number) => (
   revision === codexEditorRequestRevision && props.visible && !isEdit.value
-  && activeModelType.value === 'chat' && formData.value.source === 'remote'
+  && ['chat', 'vllm'].includes(activeModelType.value) && formData.value.source === 'remote'
   && formData.value.provider === CODEX_CLI_PROVIDER
 )
 
@@ -1552,9 +1552,12 @@ const loadCodexModelsForEditor = async () => {
     const status = await getCodexStatus()
     if (!isCurrentCodexEditorRequest(revision)) return
     if (!status.enabled || !status.connected) { codexState.value = 'unavailable'; return }
-    const models = await listCodexModels()
+    const modelType = activeModelType.value === 'vllm' ? 'VLLM' : 'KnowledgeQA'
+    const models = await listCodexModels(modelType)
     if (!isCurrentCodexEditorRequest(revision)) return
-    codexModelsForEditor.value = models.filter(model => !!model?.slug)
+    codexModelsForEditor.value = models.filter(model => !!model?.slug && (
+      modelType !== 'VLLM' || model.supports_vision === true
+    ))
     codexState.value = codexModelsForEditor.value.length ? 'ready' : 'empty'
   } catch {
     if (isCurrentCodexEditorRequest(revision)) codexState.value = 'error'
@@ -2015,7 +2018,6 @@ const selectAccountAuthSource = () => {
 }
 
 const changeAccountAuthorizationChannel = (channel: 'personal' | 'server') => {
-  if (channel === 'server' && activeModelType.value !== 'chat') return
   accountAuthorizationChannel.value = channel
   handleProviderChange(channel === 'personal' ? CHATGPT_PLAN_PROVIDER : CODEX_CLI_PROVIDER)
 }

@@ -83,8 +83,11 @@ test('server account model creation enables only the selected Codex model and ne
   assert.deepEqual(f.calls, [['enable-codex', 'server-model'], ['get', '/api/v1/models/owned-model']])
 })
 
-test('server account creation rejects non-conversation model types before requesting the catalog', async () => {
+test('server account creation supports visual models and rejects non-dialog types', async () => {
   const f = fixture()
-  await assert.rejects(f.create({ source: 'remote', type: 'VLLM', name: 'model', parameters: { provider: 'codex_cli' } }))
+  await f.create({ source: 'remote', type: 'VLLM', name: 'vision-model', parameters: { provider: 'codex_cli' } })
+  assert.deepEqual(f.calls, [['enable-codex', 'vision-model'], ['get', '/api/v1/models/owned-model']])
+  f.calls.length = 0
+  await assert.rejects(f.create({ source: 'remote', type: 'Embedding', name: 'model', parameters: { provider: 'codex_cli' } }))
   assert.equal(f.calls.length, 0)
 })

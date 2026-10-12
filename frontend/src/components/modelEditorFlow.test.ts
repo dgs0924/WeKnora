@@ -1437,7 +1437,7 @@ test('personal and server channels share authorization source and clear old mode
   } finally { f.close() }
 })
 
-test('vision authorization selects personal account and refuses server channel', async () => {
+test('vision authorization defaults to personal and can select the server vision channel', async () => {
   const f = await fixture({ type: 'vllm' })
   try {
     f.vm.selectAccountAuthSource()
@@ -1445,8 +1445,9 @@ test('vision authorization selects personal account and refuses server channel',
     assert.equal(f.vm.formData.provider, 'chatgpt_plan')
     assert.equal(f.vm.isAccountAuthEditor, true)
     f.vm.changeAccountAuthorizationChannel('server')
-    assert.equal(f.vm.formData.provider, 'chatgpt_plan')
-    assert.equal(f.codexStatusCalls(), 0)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(f.vm.formData.provider, 'codex_cli')
+    assert.equal(f.codexStatusCalls(), 1)
     assert.deepEqual(f.chatGPTModelTypes(), ['VLLM'])
   } finally { f.close() }
 })

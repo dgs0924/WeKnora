@@ -134,10 +134,10 @@ export function createModel(data: ModelConfig): Promise<ModelConfig> {
   }
 
   if (data.parameters.provider === 'codex_cli') {
-    if (data.source !== 'remote' || data.type !== 'KnowledgeQA' || !data.name.trim()) {
+    if (data.source !== 'remote' || (data.type !== 'KnowledgeQA' && data.type !== 'VLLM') || !data.name.trim()) {
       return Promise.reject(new Error(t('error.model.createFailed')))
     }
-    return selectCodexModel(data.name.trim()).then((result) => {
+    return selectCodexModel(data.name.trim(), data.type).then((result) => {
       if (!result.model_id) throw new Error(t('error.model.createFailed'))
       return getModel(result.model_id)
     })

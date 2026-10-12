@@ -23,7 +23,13 @@ const (
 	defaultTimeout   = 2 * time.Minute
 	defaultMaxOutput = 4 << 20
 	maxLineSize      = 1 << 20
-	protocolClient   = "weknora"
+	// The app-server can echo a vision turn as item/userMessage. A permitted
+	// request contains at most 50 MiB of decoded images (see chat.go), which
+	// expands to under 67 MiB as base64 plus JSON framing. Keep this bounded
+	// exception separate from the normal 1 MiB/4 MiB text-only limits.
+	maxVisionRPCLineBytes   = 72 << 20
+	maxVisionRPCOutputBytes = 208 << 20
+	protocolClient          = "weknora"
 )
 
 // Config is deployment-owned. Callers cannot override Binary, Home or WorkDir
@@ -101,7 +107,7 @@ func (r *Runtime) Status(ctx context.Context) (Status, error) {
 		return Status{}, err
 	}
 	defer r.release()
-	c, err := r.start(ctx)
+	c, err := r.start(ctx, 0)
 	if err != nil {
 		return Status{}, err
 	}
@@ -135,7 +141,7 @@ func (r *Runtime) Models(ctx context.Context) ([]Model, error) {
 		return nil, err
 	}
 	defer r.release()
-	c, err := r.start(ctx)
+	c, err := r.start(ctx, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +203,7 @@ type rpcEnvelope struct {
 	} `json:"error,omitempty"`
 }
 
-func (r *Runtime) start(parent context.Context) (*rpcClient, error) {
+func (r *Runtime) start(parent context.Context, visionBytes int) (*rpcClient, error) {
 	ctx, cancel := context.WithTimeout(parent, r.cfg.Timeout)
 	args := []string{"app-server", "--listen", "stdio://", "-c", "mcp_servers={}", "-c", "plugins={}", "-c", "web_search=\"disabled\"", "-c", "tools.experimental_request_user_input.enabled=false", "-c", "features.shell_tool=false", "-c", "features.unified_exec=false", "-c", "features.apps=false", "-c", "features.multi_agent=false", "-c", "features.shell_snapshot=false", "-c", "features.goals=false", "-c", "features.apply_patch_freeform=false", "-c", "features.browser_use=false", "-c", "features.computer_use=false", "-c", "features.plugins=false", "-c", "features.hooks=false", "-c", "features.image_generation=false", "-c", "features.worktrees=false", "-c", "features.memories=false", "-c", "features.skill_search=false", "-c", "features.sleep_tool=false", "-c", "features.view_image=false", "-c", "features.workspace_dependencies=false"}
 	cmd := exec.CommandContext(ctx, r.cfg.Binary, args...)
@@ -231,10 +237,11 @@ func (r *Runtime) start(parent context.Context) (*rpcClient, error) {
 		cancel()
 		return nil, fmt.Errorf("start Codex app-server: %w", err)
 	}
+	stdoutLimit, lineLimit := visionRPCOutputLimits(r.cfg.MaxOutputBytes, visionBytes)
 	buf := &limitedBuffer{limit: r.cfg.MaxOutputBytes}
 	go func() { _, _ = io.Copy(buf, io.LimitReader(stderr, int64(r.cfg.MaxOutputBytes)+1)) }()
-	s := bufio.NewScanner(io.LimitReader(stdout, int64(r.cfg.MaxOutputBytes)+1))
-	s.Buffer(make([]byte, 16<<10), maxLineSize)
+	s := bufio.NewScanner(io.LimitReader(stdout, int64(stdoutLimit)+1))
+	s.Buffer(make([]byte, 16<<10), lineLimit)
 	c := &rpcClient{cmd: cmd, in: in, out: s, stderr: buf, cfg: r.cfg, cancel: cancel}
 	var init map[string]any
 	if err := c.call(ctx, "initialize", map[string]any{"clientInfo": map[string]any{"name": protocolClient, "version": "1"}, "capabilities": map[string]any{"experimentalApi": true}}, &init); err != nil {
@@ -246,6 +253,30 @@ func (r *Runtime) start(parent context.Context) (*rpcClient, error) {
 		return nil, err
 	}
 	return c, nil
+}
+
+func visionRPCOutputLimits(defaultLimit, decodedImageBytes int) (stdoutLimit, lineLimit int) {
+	stdoutLimit, lineLimit = defaultLimit, maxLineSize
+	if decodedImageBytes <= 0 {
+		return stdoutLimit, lineLimit
+	}
+	// A data URI is base64, so calculate the largest permitted echo from the
+	// already validated decoded size. Codex may emit the same user message in
+	// several lifecycle events, hence three bounded copies plus the normal
+	// response allowance. This never relaxes text-only calls.
+	encoded := ((decodedImageBytes + 2) / 3) * 4
+	lineLimit = encoded + (1 << 20)
+	if lineLimit > maxVisionRPCLineBytes {
+		lineLimit = maxVisionRPCLineBytes
+	}
+	imageOutput := lineLimit*3 + defaultLimit
+	if imageOutput > maxVisionRPCOutputBytes {
+		imageOutput = maxVisionRPCOutputBytes
+	}
+	if stdoutLimit < imageOutput {
+		stdoutLimit = imageOutput
+	}
+	return stdoutLimit, lineLimit
 }
 
 func (c *rpcClient) notify(method string, params any) error {
