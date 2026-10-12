@@ -251,9 +251,11 @@
                     </div>
                   </t-option>
                 </t-select>
-                <t-button variant="text" size="small" :loading="chatGPTPlanState === 'loading'" @click="loadChatGPTPlanModels" class="refresh-btn">
-                  <t-icon name="refresh" />
-                  {{ $t('model.editor.chatgptPlan.refresh') }}
+                <t-button variant="text" shape="square" :loading="chatGPTPlanState === 'loading'"
+                  :title="$t('model.editor.chatgptPlan.refresh')"
+                  :aria-label="$t('model.editor.chatgptPlan.refresh')"
+                  @click="loadChatGPTPlanModels" class="refresh-btn account-refresh-btn">
+                  <template #icon><t-icon name="refresh" /></template>
                 </t-button>
               </div>
               <p class="form-desc">{{ $t('model.editor.chatgptPlan.modelHint') }}</p>
@@ -293,7 +295,12 @@
                 <t-select v-model="formData.modelName" filterable clearable :loading="codexState === 'loading'" :disabled="codexState !== 'ready'" :placeholder="$t('model.editor.codexCli.modelPlaceholder')">
                   <t-option v-for="model in codexModelsForEditor" :key="model.slug" :value="model.slug" :label="model.display_name || model.slug" />
                 </t-select>
-                <t-button variant="text" size="small" :loading="codexState === 'loading'" @click="loadCodexModelsForEditor" class="refresh-btn"><t-icon name="refresh" />{{ $t('model.editor.chatgptPlan.refresh') }}</t-button>
+                <t-button variant="text" shape="square" :loading="codexState === 'loading'"
+                  :title="$t('model.editor.chatgptPlan.refresh')"
+                  :aria-label="$t('model.editor.chatgptPlan.refresh')"
+                  @click="loadCodexModelsForEditor" class="refresh-btn account-refresh-btn">
+                  <template #icon><t-icon name="refresh" /></template>
+                </t-button>
               </div>
               <p class="form-desc">{{ $t('model.editor.codexCli.modelHint') }}</p>
             </div>
@@ -3043,6 +3050,12 @@ const handleCancel = () => {
 
 .refresh-btn {
   flex-shrink: 0;
+}
+
+.account-refresh-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
 }
 
 // 维度控制样式
