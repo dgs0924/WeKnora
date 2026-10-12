@@ -9,11 +9,20 @@ import (
 	"strings"
 )
 
-func (r *Runtime) Chat(name, id string) chat.Chat { return &modelChat{r, name, id} }
+func (r *Runtime) Chat(name, id string) chat.Chat {
+	return r.ChatAuthorized(name, id, nil)
+}
+
+// ChatAuthorized rechecks application permissions after any wait for the
+// runtime gate. A queued request must not use a grant revoked while it waited.
+func (r *Runtime) ChatAuthorized(name, id string, authorize func(context.Context) error) chat.Chat {
+	return &modelChat{r: r, name: name, id: id, authorize: authorize}
+}
 
 type modelChat struct {
-	r        *Runtime
-	name, id string
+	r         *Runtime
+	name, id  string
+	authorize func(context.Context) error
 }
 
 func (c *modelChat) GetModelName() string { return c.name }
@@ -62,6 +71,13 @@ func (c *modelChat) ChatStream(ctx context.Context, ms []chat.Message, o *chat.C
 	if e = c.r.acquire(callCtx); e != nil {
 		cancel()
 		return nil, e
+	}
+	if c.authorize != nil {
+		if e = c.authorize(callCtx); e != nil {
+			c.r.release()
+			cancel()
+			return nil, e
+		}
 	}
 	out := make(chan types.StreamResponse, 32)
 	go func() {

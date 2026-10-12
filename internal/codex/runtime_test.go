@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -42,6 +44,51 @@ func TestRuntimeStatusUsesOnlyAppServerAccountMetadata(t *testing.T) {
 	if !status.LoggedIn || status.Email != "person@example.test" || status.Plan != "plus" {
 		t.Fatalf("unexpected status: %#v", status)
 	}
+}
+
+func TestQueuedRequestRechecksAuthorizationAfterGrantRevocation(t *testing.T) {
+	r := testRuntime(t, "status")
+	if err := r.acquire(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var allowed atomic.Bool
+	allowed.Store(true)
+	checked := make(chan struct{}, 1)
+	revoked := errors.New("grant revoked")
+	client := r.ChatAuthorized("gpt-test", "id", func(context.Context) error {
+		checked <- struct{}{}
+		if !allowed.Load() {
+			return revoked
+		}
+		return nil
+	})
+	result := make(chan error, 1)
+	go func() {
+		_, err := client.ChatStream(context.Background(), []chat.Message{{Role: "user", Content: "hello"}}, nil)
+		result <- err
+	}()
+	select {
+	case <-checked:
+		r.release()
+		t.Fatal("authorization was checked before the queued request acquired the runtime")
+	case <-time.After(30 * time.Millisecond):
+	}
+	allowed.Store(false)
+	r.release()
+	select {
+	case err := <-result:
+		if !errors.Is(err, revoked) {
+			t.Fatalf("queued request ignored revocation: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("queued request did not finish after revocation")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := r.acquire(ctx); err != nil {
+		t.Fatalf("denied request retained the runtime gate: %v", err)
+	}
+	r.release()
 }
 
 func TestChatStreamRelaysDeltasAndDeniesUnsafeAppServerRequest(t *testing.T) {

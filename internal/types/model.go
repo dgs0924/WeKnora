@@ -253,6 +253,19 @@ type Model struct {
 	DeletedAt gorm.DeletedAt `yaml:"deleted_at"  json:"deleted_at"  gorm:"index"`
 }
 
+// CodexModelGrant is a deployment-wide ACL entry. Codex model rows remain
+// tenant-owned; this table is the only cross-workspace visibility bridge.
+type CodexModelGrant struct {
+	ModelID     string    `gorm:"primaryKey;type:varchar(64)"`
+	UserID      string    `gorm:"primaryKey;type:varchar(36);index"`
+	OwnerUserID string    `gorm:"type:varchar(36);not null;index"`
+	GrantedBy   string    `gorm:"type:varchar(36);not null"`
+	CreatedAt   time.Time `gorm:"not null"`
+	UpdatedAt   time.Time `gorm:"not null"`
+}
+
+func (CodexModelGrant) TableName() string { return "codex_model_grants" }
+
 // Value implements the driver.Valuer interface, used to convert ModelParameters to database value.
 // Encrypts APIKey and AppSecret before persisting to database (value receiver = no memory pollution).
 func (c ModelParameters) Value() (driver.Value, error) {

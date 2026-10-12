@@ -31,6 +31,7 @@ type modelService struct {
 	chatGPT       chatGPTTokenSource
 	codex         *codex.Runtime
 	codexOwner    string
+	codexUsers    interfaces.UserRepository
 	repo          interfaces.ModelRepository
 	kbRepo        interfaces.KnowledgeBaseRepository
 	agentRepo     interfaces.CustomAgentRepository
@@ -267,7 +268,8 @@ func (s *modelService) GetModelByID(ctx context.Context, id string) (*types.Mode
 
 	tenantID := types.MustTenantIDFromContext(ctx)
 
-	// Fetch model from repository
+	// Fetch the tenant model first. A granted Codex model is the one narrowly
+	// allowed cross-tenant exception; ordinary model isolation is unchanged.
 	model, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
@@ -277,13 +279,27 @@ func (s *modelService) GetModelByID(ctx context.Context, id string) (*types.Mode
 		return nil, err
 	}
 
+	if model == nil {
+		if grants, ok := s.repo.(interfaces.CodexGrantRepository); ok {
+			uid, userOK := types.UserIDFromContext(ctx)
+			if userOK {
+				model, err = grants.GetGrantedCodexModel(ctx, s.codexOwner, uid, id)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
 	// Check if model exists
 	if model == nil {
 		logger.Error(ctx, "Model not found")
 		return nil, ErrModelNotFound
 	}
 
-	if isPersonalPlanModel(model) && !ownsPersonalPlanModel(ctx, model) {
+	if isCodexModel(model) && !s.canUseCodexModel(ctx, model) {
+		return nil, apperrors.NewForbiddenError("Codex model is unavailable to this account")
+	}
+	if isChatGPTModel(model) && !ownsChatGPTModel(ctx, model) {
 		return nil, apperrors.NewForbiddenError("personal plan model is unavailable to this account")
 	}
 	logger.Infof(ctx, "Model found, name: %s, status: %s", model.Name, model.Status)
@@ -325,13 +341,37 @@ func (s *modelService) ListModels(ctx context.Context) ([]*types.Model, error) {
 
 	visible := models[:0]
 	for _, model := range models {
-		if !isPersonalPlanModel(model) || ownsPersonalPlanModel(ctx, model) {
+		if !isPersonalPlanModel(model) || (isChatGPTModel(model) && ownsChatGPTModel(ctx, model)) || (isCodexModel(model) && s.canUseCodexModel(ctx, model)) {
 			visible = append(visible, model)
 		}
 	}
 	models = visible
+	if grants, ok := s.repo.(interfaces.CodexGrantRepository); ok {
+		if uid, present := types.UserIDFromContext(ctx); present && uid != s.codexOwner {
+			if extra, grantErr := grants.ListGrantedCodexModels(ctx, s.codexOwner, uid); grantErr == nil {
+				presentIDs := make(map[string]struct{}, len(models))
+				for _, model := range models {
+					presentIDs[model.ID] = struct{}{}
+				}
+				for _, model := range extra {
+					if _, seen := presentIDs[model.ID]; !seen && s.canUseCodexModel(ctx, model) {
+						models = append(models, model)
+						presentIDs[model.ID] = struct{}{}
+					}
+				}
+			}
+		}
+	}
 	logger.Infof(ctx, "Retrieved %d models successfully", len(models))
 	return models, nil
+}
+
+func (s *modelService) canUseCodexModel(ctx context.Context, model *types.Model) bool {
+	grants, ok := s.repo.(interfaces.CodexGrantRepository)
+	if !ok {
+		return canUseCodexModel(ctx, model, s.codexOwner, nil, nil)
+	}
+	return canUseCodexModel(ctx, model, s.codexOwner, grants, s.codexUsers)
 }
 
 // UpdateModel updates an existing model in the repository
@@ -741,6 +781,16 @@ func (s *modelService) GetChatModel(ctx context.Context, modelId string) (chat.C
 		})
 		return nil, err
 	}
+	if model == nil {
+		if grants, ok := s.repo.(interfaces.CodexGrantRepository); ok {
+			if uid, present := types.UserIDFromContext(ctx); present {
+				model, err = grants.GetGrantedCodexModel(ctx, s.codexOwner, uid, modelId)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
 
 	if model == nil {
 		logger.Error(ctx, "Chat model not found")
@@ -763,13 +813,13 @@ func (s *modelService) GetChatModel(ctx context.Context, modelId string) (chat.C
 		if s.codex == nil {
 			return nil, errors.New("Codex connection is unavailable")
 		}
-		if _, err := CodexUser(ctx, s.codexOwner); err != nil || !ownsCodexModel(ctx, model) {
+		if !s.canUseCodexModel(ctx, model) {
 			return nil, apperrors.NewForbiddenError("Codex model belongs to another account")
 		}
 		if model.Type != types.ModelTypeKnowledgeQA {
 			return nil, apperrors.NewBadRequestError("selected Codex model is not a chat model")
 		}
-		return &personalCodexChat{runtime: s.codex, owner: s.codexOwner, name: model.Name, id: model.ID}, nil
+		return &personalCodexChat{runtime: s.codex, owner: s.codexOwner, name: model.Name, id: model.ID, repo: s.repo, users: s.codexUsers}, nil
 	}
 	logger.Infof(ctx, "Getting chat model: %s, source: %s", model.Name, model.Source)
 

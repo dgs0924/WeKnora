@@ -26,6 +26,26 @@ type chatGPTListRepo struct {
 	rows []*types.Model
 }
 
+// These optional Codex methods make this shared in-memory model fixture usable
+// by Codex tests without weakening production's fail-closed ACL path.
+func (r *chatGPTListRepo) ReplaceCodexGrantsForUser(context.Context, string, string, string, []string) error {
+	return nil
+}
+func (r *chatGPTListRepo) ListCodexModelsForOwner(context.Context, string) ([]*types.Model, error) {
+	return r.rows, nil
+}
+func (r *chatGPTListRepo) ListGrantedCodexModels(context.Context, string, string) ([]*types.Model, error) {
+	return nil, nil
+}
+func (r *chatGPTListRepo) GetGrantedCodexModel(context.Context, string, string, string) (*types.Model, error) {
+	// This generic fixture represents no explicit Codex grants. Dedicated
+	// Codex ACL tests use codexGrantTestRepo when a grant is needed.
+	return nil, nil
+}
+func (r *chatGPTListRepo) ListCodexGrants(context.Context, string) ([]*types.CodexModelGrant, error) {
+	return nil, nil
+}
+
 func (r *chatGPTListRepo) List(context.Context, uint64, types.ModelType, types.ModelSource) ([]*types.Model, error) {
 	return r.rows, nil
 }

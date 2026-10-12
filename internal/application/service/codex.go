@@ -83,7 +83,7 @@ func isCodexModel(m *types.Model) bool {
 }
 
 func ownsCodexModel(ctx context.Context, m *types.Model) bool {
-	if !isCodexModel(m) || m.IsBuiltin {
+	if !isCodexModel(m) || m.ManagedBy != "codex" || m.IsBuiltin {
 		return false
 	}
 	configuredOwner := strings.TrimSpace(os.Getenv("WEKNORA_CODEX_OWNER_USER_ID"))
@@ -94,9 +94,42 @@ func ownsCodexModel(ctx context.Context, m *types.Model) bool {
 	return err == nil && uid == configuredOwner
 }
 
+// canUseCodexModel admits the configured deployment owner and explicitly
+// granted active platform users only. It is rechecked for every request so
+// revocation takes effect before the next upstream request.
+func canUseCodexModel(ctx context.Context, m *types.Model, configuredOwner string, grants interfaces.CodexGrantRepository, users interfaces.UserRepository) bool {
+	if configuredOwner == "" {
+		configuredOwner = strings.TrimSpace(os.Getenv("WEKNORA_CODEX_OWNER_USER_ID"))
+	}
+	if !isCodexModel(m) || m.ManagedBy != "codex" || m.IsBuiltin || m.Type != types.ModelTypeKnowledgeQA || m.Status != types.ModelStatusActive || configuredOwner == "" || m.Parameters.ExtraConfig[codexOwnerKey] != configuredOwner {
+		return false
+	}
+	uid, err := ChatGPTUser(ctx)
+	if err != nil {
+		return false
+	}
+	if users == nil || grants == nil {
+		return false
+	}
+	owner, err := users.GetUserByID(ctx, configuredOwner)
+	if err != nil || owner == nil || !owner.IsActive {
+		return false
+	}
+	grantee, err := users.GetUserByID(ctx, uid)
+	if err != nil || grantee == nil || !grantee.IsActive {
+		return false
+	}
+	if uid == configuredOwner {
+		return true
+	}
+	granted, err := grants.GetGrantedCodexModel(ctx, configuredOwner, uid, m.ID)
+	return err == nil && granted != nil && granted.ID == m.ID
+}
+
 func NewModelServiceWithChatGPTAndCodex(repo interfaces.ModelRepository, kb interfaces.KnowledgeBaseRepository,
 	agents interfaces.CustomAgentRepository, ol *ollama.OllamaService, pool embedding.EmbedderPooler,
 	tenants interfaces.TenantService, accounts *chatgpt.Manager, connection *CodexConnection,
+	users interfaces.UserRepository,
 ) interfaces.ModelService {
 	s := NewModelService(repo, kb, agents, ol, pool, tenants).(*modelService)
 	s.chatGPT = accounts
@@ -104,6 +137,7 @@ func NewModelServiceWithChatGPTAndCodex(repo interfaces.ModelRepository, kb inte
 		s.codex = connection.Runtime
 		s.codexOwner = connection.Owner
 	}
+	s.codexUsers = users
 	return s
 }
 
@@ -177,6 +211,8 @@ func EnableCodexModel(ctx context.Context, connection *CodexConnection, repo int
 type personalCodexChat struct {
 	runtime         *codex.Runtime
 	owner, name, id string
+	repo            interfaces.ModelRepository
+	users           interfaces.UserRepository
 }
 
 func (c *personalCodexChat) GetModelName() string { return c.name }
@@ -196,8 +232,49 @@ func (c *personalCodexChat) ChatStream(ctx context.Context, messages []chat.Mess
 	return client.ChatStream(ctx, messages, opts)
 }
 func (c *personalCodexChat) client(ctx context.Context) (chat.Chat, error) {
-	if _, err := CodexUser(ctx, c.owner); err != nil || c.runtime == nil {
+	if c.runtime == nil {
 		return nil, apperrors.NewForbiddenError("Codex model belongs to another account")
 	}
-	return c.runtime.Chat(c.name, c.id), nil
+	tenantID, ok := types.TenantIDFromContext(ctx)
+	if !ok || tenantID == 0 || c.repo == nil {
+		return nil, apperrors.NewForbiddenError("Codex model belongs to another account")
+	}
+	model, err := c.authorize(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return c.runtime.ChatAuthorized(model.Name, model.ID, func(callCtx context.Context) error { _, err := c.authorize(callCtx); return err }), nil
+}
+
+// authorize re-reads the model and ACL. Runtime invokes it again after its
+// single-request gate is acquired, closing the revoke-while-queued window.
+func (c *personalCodexChat) authorize(ctx context.Context) (*types.Model, error) {
+	if c.runtime == nil {
+		return nil, apperrors.NewForbiddenError("Codex model belongs to another account")
+	}
+	tenantID, ok := types.TenantIDFromContext(ctx)
+	if !ok || tenantID == 0 || c.repo == nil {
+		return nil, apperrors.NewForbiddenError("Codex model belongs to another account")
+	}
+	grants, ok := c.repo.(interfaces.CodexGrantRepository)
+	if !ok {
+		return nil, apperrors.NewForbiddenError("Codex model belongs to another account")
+	}
+	uid := codexContextUserID(ctx)
+	var model *types.Model
+	var err error
+	if uid == c.owner {
+		model, err = c.repo.GetByID(ctx, tenantID, c.id)
+	} else {
+		model, err = grants.GetGrantedCodexModel(ctx, c.owner, uid, c.id)
+	}
+	if err != nil || model == nil || model.Status != types.ModelStatusActive || !canUseCodexModel(ctx, model, c.owner, grants, c.users) {
+		return nil, apperrors.NewForbiddenError("Codex model belongs to another account")
+	}
+	return model, nil
+}
+
+func codexContextUserID(ctx context.Context) string {
+	uid, _ := types.UserIDFromContext(ctx)
+	return uid
 }

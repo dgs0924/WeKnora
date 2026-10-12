@@ -153,6 +153,9 @@
             </t-button>
           </div>
         </div>
+        <t-alert v-if="codexStatus.connection_error" theme="warning" class="chatgpt-settings__alert">
+          {{ t('codexSettings.notConnectedDescription') }}
+        </t-alert>
 
         <template v-if="codexStatus.connected">
           <div v-if="codexModelsLoading" class="chatgpt-settings__models-loading">
@@ -186,7 +189,59 @@
               </div>
             </div>
           </div>
+
         </template>
+
+          <section v-if="canManageCodexGrants" class="chatgpt-settings__grants">
+            <div class="chatgpt-settings__models-heading">
+              <h4>{{ t('codexSettings.grantsTitle') }}</h4>
+              <p>{{ t('codexSettings.grantsDescription') }}</p>
+            </div>
+            <t-alert theme="warning" class="chatgpt-settings__grant-warning">
+              {{ t('codexSettings.grantsUsageWarning') }}
+            </t-alert>
+            <div v-if="codexGrantsLoading" class="chatgpt-settings__models-loading">
+              <t-loading :text="t('codexSettings.grantsLoading')" size="small" />
+            </div>
+            <t-alert v-else-if="codexGrantsLoadFailed" theme="warning" :title="t('codexSettings.grantsLoadFailed')">
+              <t-button variant="outline" @click="loadCodexGrants">{{ t('common.refresh') }}</t-button>
+            </t-alert>
+            <template v-else>
+              <t-select
+                v-model="grantMemberID"
+                :label="t('codexSettings.grantMember')"
+                :placeholder="t('codexSettings.grantMemberPlaceholder')"
+                :disabled="grantUsers.length === 0"
+                class="chatgpt-settings__grant-member"
+              >
+                <t-option v-for="user in grantUsers" :key="user.id" :value="user.id" :label="grantUserLabel(user)" />
+              </t-select>
+              <t-empty v-if="grantUsers.length === 0" :description="t('codexSettings.grantsMembersEmpty')" />
+              <div v-else-if="!grantMemberID" class="chatgpt-settings__grant-placeholder">
+                {{ t('codexSettings.grantMemberPlaceholder') }}
+              </div>
+              <div v-else class="chatgpt-settings__grant-list">
+                <div v-for="model in codexGrants" :key="model.id" class="chatgpt-settings__grant-row">
+                  <div>
+                    <div class="chatgpt-settings__model-name">{{ model.display_name || model.name }}</div>
+                    <code>{{ model.name }}</code>
+                  </div>
+                  <t-checkbox
+                    :model-value="selectedCodexGrantIDs.includes(model.id)"
+                    :disabled="savingCodexGrants"
+                    @change="(checked: boolean) => toggleCodexGrant(model.id, checked)"
+                  >
+                    {{ t('codexSettings.grantModel') }}
+                  </t-checkbox>
+                </div>
+              </div>
+              <div class="chatgpt-settings__grant-actions">
+                <t-button theme="primary" :loading="savingCodexGrants" @click="saveCodexGrants">
+                  {{ t('codexSettings.grantsSave') }}
+                </t-button>
+              </div>
+            </template>
+          </section>
 
         <t-alert theme="info" class="chatgpt-settings__usage" :title="t('codexSettings.usageTitle')">
           {{ t('codexSettings.usageHint') }}
@@ -208,7 +263,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import {
@@ -221,11 +276,25 @@ import {
   type ChatGPTModel,
 } from '@/api/chatgpt'
 import { chatGPTAuthorizationOutcome } from '@/api/chatgptAuthorization'
-import { getCodexStatus, listCodexModels, selectCodexModel, type CodexConnectionStatus, type CodexModel } from '@/api/codex'
+import {
+  getCodexStatus,
+  listCodexGrantUsers,
+  listCodexModelGrants,
+  listCodexModels,
+  selectCodexModel,
+  updateCodexUserGrants,
+  type CodexConnectionStatus,
+  type CodexModel,
+  type CodexModelGrant,
+  type CodexGrantUser,
+} from '@/api/codex'
+import { useAuthStore } from '@/stores/auth'
 import { useChatResourcesStore } from '@/stores/chatResources'
+import { grantSelectionForUser, toggleGrantSelection } from '@/api/codexGrantState'
 
 const { t } = useI18n()
 const chatResources = useChatResourcesStore()
+const authStore = useAuthStore()
 
 const loading = ref(true)
 const modelsLoading = ref(false)
@@ -247,6 +316,13 @@ const selectingCodexSlug = ref('')
 const codexStatus = ref<CodexConnectionStatus | null>(null)
 const codexModels = ref<CodexModel[]>([])
 const enabledCodexModelSlugs = ref(new Set<string>())
+const codexGrantsLoading = ref(false)
+const codexGrantsLoadFailed = ref(false)
+const savingCodexGrants = ref(false)
+const codexGrants = ref<CodexModelGrant[]>([])
+const grantUsers = ref<CodexGrantUser[]>([])
+const grantMemberID = ref('')
+const selectedCodexGrantIDs = ref<string[]>([])
 
 let pollTimer: number | null = null
 let authorizationPopup: Window | null = null
@@ -272,6 +348,9 @@ const codexConnectionDescription = computed(() => (
     : t('codexSettings.notConnectedDescription')
 ))
 const codexVisible = computed(() => !!codexStatus.value?.enabled || codexStatusLoadFailed.value)
+const canManageCodexGrants = computed(() => !!codexStatus.value?.manage_grants)
+
+watch(grantMemberID, () => syncSelectedCodexGrantIDs())
 
 async function loadCodexModels() {
   if (!codexStatus.value?.connected) {
@@ -294,6 +373,68 @@ async function loadCodexModels() {
   }
 }
 
+function grantUserLabel(user: CodexGrantUser): string {
+  return user.username || user.email || user.id
+}
+
+function syncSelectedCodexGrantIDs() {
+  selectedCodexGrantIDs.value = grantSelectionForUser(codexGrants.value, grantMemberID.value)
+}
+
+function toggleCodexGrant(modelID: string, checked: boolean) {
+  selectedCodexGrantIDs.value = toggleGrantSelection(selectedCodexGrantIDs.value, modelID, checked)
+}
+
+async function loadCodexGrants() {
+  if (!canManageCodexGrants.value) {
+    codexGrants.value = []
+    grantUsers.value = []
+    return
+  }
+  codexGrantsLoading.value = true
+  codexGrantsLoadFailed.value = false
+  try {
+    const [models, users] = await Promise.all([
+      listCodexModelGrants(),
+      listCodexGrantUsers(),
+    ])
+    if (unmounted) return
+    codexGrants.value = models
+    // The connection owner already has access; grants apply to active users
+    // across all spaces, excluding the owner.
+    grantUsers.value = users.filter((user) => user.id !== authStore.currentUserId)
+    if (!grantUsers.value.some((user) => user.id === grantMemberID.value)) {
+      grantMemberID.value = ''
+    }
+    syncSelectedCodexGrantIDs()
+  } catch {
+    if (unmounted) return
+    codexGrantsLoadFailed.value = true
+  } finally {
+    if (!unmounted) codexGrantsLoading.value = false
+  }
+}
+
+async function saveCodexGrants() {
+  const userID = grantMemberID.value
+  if (!userID) return
+  savingCodexGrants.value = true
+  try {
+    // This endpoint atomically replaces only the selected member's grants;
+    // grants for all other members stay intact.
+    await updateCodexUserGrants(userID, selectedCodexGrantIDs.value)
+    if (unmounted) return
+    await loadCodexGrants()
+    MessagePlugin.success(t('codexSettings.grantsSaved'))
+  } catch (error: any) {
+    if (unmounted) return
+    MessagePlugin.error(error?.message || t('codexSettings.grantSaveFailed'))
+    await loadCodexGrants()
+  } finally {
+    if (!unmounted) savingCodexGrants.value = false
+  }
+}
+
 async function loadCodex() {
   codexLoading.value = true
   try {
@@ -301,8 +442,11 @@ async function loadCodex() {
     if (unmounted) return
     codexStatus.value = nextStatus
     codexStatusLoadFailed.value = false
-    if (nextStatus.enabled && nextStatus.connected) await loadCodexModels()
+    if (nextStatus.enabled && nextStatus.connected) {
+      await loadCodexModels()
+    }
     else codexModels.value = []
+    if (nextStatus.enabled) await loadCodexGrants()
   } catch (error: any) {
     if (unmounted) return
     // A 404 means this is an older WeKnora server, so keep the optional entry
@@ -554,8 +698,33 @@ onUnmounted(() => { unmounted = true; stopPolling({ closePopup: true }) })
 
 .chatgpt-settings__model-name { margin-bottom: 4px; font-weight: 500; }
 
+.chatgpt-settings__grants {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--td-component-stroke);
+
+  h4 { margin: 0 0 6px; font-size: 15px; }
+}
+
+.chatgpt-settings__grant-warning { margin-bottom: 16px; }
+.chatgpt-settings__grant-member { width: min(100%, 440px); margin-bottom: 16px; }
+.chatgpt-settings__grant-placeholder { color: var(--td-text-color-secondary); padding: 16px 0; }
+.chatgpt-settings__grant-list { border: 1px solid var(--td-component-stroke); border-radius: 6px; }
+.chatgpt-settings__grant-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--td-component-stroke);
+
+  &:last-child { border-bottom: 0; }
+  code { color: var(--td-text-color-secondary); font-size: 12px; }
+}
+
 @media (max-width: 640px) {
   .chatgpt-settings__connection-actions,
-  .chatgpt-settings__model-row { align-items: flex-start; flex-direction: column; }
+  .chatgpt-settings__model-row,
+  .chatgpt-settings__grant-row { align-items: flex-start; flex-direction: column; }
 }
 </style>

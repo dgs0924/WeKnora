@@ -71,3 +71,14 @@ type ModelRepository interface {
 	// optionally excluding a specific model ID.
 	ClearDefaultByType(ctx context.Context, tenantID uint, modelType types.ModelType, excludeID string) error
 }
+
+// CodexGrantRepository is an optional extension implemented by the database
+// repository. It keeps a user's grants across all Codex models in one
+// transaction; callers must still validate the caller and target membership.
+type CodexGrantRepository interface {
+	ReplaceCodexGrantsForUser(ctx context.Context, owner, userID, grantedBy string, modelIDs []string) error
+	ListCodexModelsForOwner(ctx context.Context, owner string) ([]*types.Model, error)
+	ListGrantedCodexModels(ctx context.Context, owner, userID string) ([]*types.Model, error)
+	GetGrantedCodexModel(ctx context.Context, owner, userID, modelID string) (*types.Model, error)
+	ListCodexGrants(ctx context.Context, owner string) ([]*types.CodexModelGrant, error)
+}

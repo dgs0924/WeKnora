@@ -15,4 +15,7 @@ func RegisterCodexRoutes(r *gin.RouterGroup, h *handler.CodexHandler) {
 	g.GET("/status", h.Status)
 	g.GET("/models", h.Models)
 	g.POST("/models/select", h.SelectModel)
+	g.GET("/grants", h.Grants)
+	g.GET("/grant-users", h.GrantUsers)
+	g.PUT("/grants/users/:userID", h.ReplaceUserGrants)
 }
