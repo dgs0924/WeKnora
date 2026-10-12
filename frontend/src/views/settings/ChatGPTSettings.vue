@@ -51,9 +51,6 @@
             <p v-if="status?.connected && status.email" class="chatgpt-settings__email">
               {{ t('chatgptSettings.connectedAccount', { email: status.email }) }}
             </p>
-            <p v-if="status?.connected && formattedExpiry" class="chatgpt-settings__expiry">
-              {{ t('chatgptSettings.expiresAt', { time: formattedExpiry }) }}
-            </p>
           </div>
           <div class="setting-control chatgpt-settings__connection-actions">
             <t-tag :theme="status?.connected ? 'success' : 'default'" variant="light">
@@ -188,13 +185,6 @@ const pendingFailed = computed(() => {
 const connectionDescription = computed(() => {
   if (status.value?.connected) return t('chatgptSettings.connectedDescription')
   return t('chatgptSettings.notConnectedDescription')
-})
-
-const formattedExpiry = computed(() => {
-  if (!status.value?.expires_at) return ''
-  const date = new Date(status.value.expires_at)
-  if (Number.isNaN(date.getTime())) return status.value.expires_at
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 })
 
 function stopPolling({ closePopup = false }: { closePopup?: boolean } = {}) {
@@ -388,12 +378,6 @@ onUnmounted(() => { unmounted = true; stopPolling({ closePopup: true }) })
 .chatgpt-settings__email {
   margin: 6px 0 0;
   color: var(--td-text-color-primary);
-}
-
-.chatgpt-settings__expiry {
-  margin: 4px 0 0;
-  color: var(--td-text-color-secondary);
-  font-size: 13px;
 }
 
 .chatgpt-settings__models-heading {
