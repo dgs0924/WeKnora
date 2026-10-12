@@ -3149,6 +3149,15 @@ export default {
       providerLabel: '프로바이더',
       providerPlaceholder: '모델 프로바이더 선택',
       providerDocs: '{provider} 모델 문서 보기',
+      chatgptPlan: {
+        provider: 'ChatGPT 플랜(내 계정)', providerDescription: '연결된 ChatGPT Plus 또는 Pro 계정에서 사용할 수 있는 모델',
+        title: 'ChatGPT 플랜 모델', hint: '연결된 ChatGPT 계정의 모델 목록을 사용합니다. API Key나 Base URL은 필요하지 않습니다.',
+        existingHint: '이 모델은 ChatGPT 플랜 연결로 관리됩니다. 연결과 사용 가능한 모델은 ChatGPT 설정에서 관리하세요.',
+        unbound: '먼저 사용 가능한 ChatGPT Plus 또는 Pro 계정을 연결하세요.', loadFailed: '사용 가능한 ChatGPT 모델을 불러올 수 없습니다.',
+        empty: '이 ChatGPT 계정에는 현재 사용 가능한 모델이 없습니다.', retry: '다시 시도', refresh: '목록 새로고침',
+        goToSettings: 'ChatGPT 설정으로 이동', modelPlaceholder: 'ChatGPT 모델 선택',
+        modelHint: '현재 계정에 승인된 모델만 선택할 수 있습니다.', modelRequired: '현재 ChatGPT 계정에서 사용할 수 있는 모델을 선택하세요.',
+      },
       validation: {
         extraFieldRequired: '{name}을(를) 입력하세요',
         modelNameRequired: '모델 이름을 입력해주세요',

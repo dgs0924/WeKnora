@@ -5172,6 +5172,15 @@ export default {
       providerLabel: 'プロバイダ',
       providerPlaceholder: 'モデルプロバイダを選択',
       providerDocs: '{provider} のモデルドキュメントを見る',
+      chatgptPlan: {
+        provider: 'ChatGPT プラン（自分のアカウント）', providerDescription: '接続済みの ChatGPT Plus または Pro アカウントで利用可能なモデル',
+        title: 'ChatGPT プランモデル', hint: '接続済み ChatGPT アカウントのモデル一覧を使用します。API Key や Base URL は不要です。',
+        existingHint: 'このモデルは ChatGPT プラン接続で管理されています。接続と利用可能なモデルは ChatGPT 設定で管理してください。',
+        unbound: '先に利用可能な ChatGPT Plus または Pro アカウントを接続してください。', loadFailed: '利用可能な ChatGPT モデルを読み込めませんでした。',
+        empty: 'この ChatGPT アカウントで現在利用可能なモデルはありません。', retry: '再試行', refresh: '一覧を更新',
+        goToSettings: 'ChatGPT 設定へ', modelPlaceholder: 'ChatGPT モデルを選択',
+        modelHint: 'このアカウントで認可されたモデルのみ選択できます。', modelRequired: '現在の ChatGPT アカウントで利用可能なモデルを選択してください。',
+      },
     },
     builtinTag: '組み込み'
   },

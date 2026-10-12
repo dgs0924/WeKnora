@@ -3157,6 +3157,15 @@ export default {
       providerLabel: '服務商',
       providerPlaceholder: '選擇模型服務商',
       providerDocs: '查看 {provider} 的模型文件',
+      chatgptPlan: {
+        provider: 'ChatGPT 方案（我的帳號）', providerDescription: '使用已綁定 ChatGPT Plus 或 Pro 帳號可用的模型',
+        title: 'ChatGPT 方案模型', hint: '模型目錄來自您已綁定的 ChatGPT 帳號，無需填寫 API Key 或 Base URL。',
+        existingHint: '此模型由您的 ChatGPT 方案連線管理。請在 ChatGPT 設定中管理連線和可用模型。',
+        unbound: '請先綁定可用的 ChatGPT Plus 或 Pro 帳號。', loadFailed: '無法載入 ChatGPT 可用模型。',
+        empty: '該 ChatGPT 帳號目前沒有可用模型。', retry: '重試', refresh: '重新整理目錄',
+        goToSettings: '前往 ChatGPT 設定', modelPlaceholder: '選擇 ChatGPT 模型',
+        modelHint: '只能選擇目前帳號授權的模型。', modelRequired: '請選擇目前 ChatGPT 帳號可用的模型。',
+      },
       validation: {
         extraFieldRequired: '請填寫 {name}',
         modelNameRequired: '請輸入模型名稱',

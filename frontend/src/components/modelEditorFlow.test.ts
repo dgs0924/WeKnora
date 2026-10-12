@@ -36,6 +36,8 @@ async function fixture(options: {
   providersByType?: Record<string, any[]>
   loadProviders?: (type?: string) => Promise<void>
   resolve?: (params: any) => Promise<any>
+  chatGPTStatus?: () => Promise<any>
+  chatGPTModels?: () => Promise<any[]>
 } = {}) {
   const requests: any[] = []
   const saves: any[] = []
@@ -43,6 +45,8 @@ async function fixture(options: {
   const providers: any[] = options.providers || []
   const catalogEvents: string[] = []
   const catalogRequests: Array<{ type?: string; force?: boolean }> = []
+  let chatGPTStatusCalls = 0
+  let chatGPTModelCalls = 0
   const loadedProviders = reactive<Record<string, any[]>>({})
   const providersStore = {
     ensureLoaded: async (type?: string, force?: boolean) => {
@@ -96,6 +100,16 @@ async function fixture(options: {
       }
       if (name === '@/stores/modelProviders') return { useModelProvidersStore: () => providersStore }
       if (name === '@/api/model') return { getWeKnoraCloudStatus: async () => ({ has_models: true, needs_reinit: false }) }
+      if (name === '@/api/chatgpt') return {
+        getChatGPTStatus: async () => {
+          chatGPTStatusCalls++
+          return options.chatGPTStatus ? options.chatGPTStatus() : { connected: true, plan_enabled: true }
+        },
+        listChatGPTModels: async () => {
+          chatGPTModelCalls++
+          return options.chatGPTModels ? options.chatGPTModels() : []
+        },
+      }
       if (name === '@/utils/weknoraCloudModels') return require('../utils/weknoraCloudModels.ts')
       if (name === '@/utils/docsUrl') return require('../utils/docsUrl.ts')
       if (name === '@/stores/modelProvidersState') return require('../stores/modelProvidersState.ts')
@@ -128,7 +142,11 @@ async function fixture(options: {
   Object.assign(vm.formData, { modelName: 'draft-model', baseUrl: 'https://example.com/v1', apiKey: options.edit ? '' : 'draft-key' })
   vm.formRef = { validate: async () => true }
   await nextTick()
-  return { vm, props, requests, saves, toasts, visibility, resolves, catalogEvents, catalogRequests, close: () => app.unmount() }
+  return {
+    vm, props, requests, saves, toasts, visibility, resolves, catalogEvents, catalogRequests,
+    chatGPTStatusCalls: () => chatGPTStatusCalls, chatGPTModelCalls: () => chatGPTModelCalls,
+    close: () => app.unmount(),
+  }
 }
 
 for (const type of ['embedding', 'rerank', 'vllm', 'asr']) {
@@ -148,6 +166,57 @@ for (const type of ['embedding', 'rerank', 'vllm', 'asr']) {
     } finally { f.close() }
   })
 }
+
+test('ChatGPT plan provider is offered only for new remote chat models', async () => {
+  const f = await fixture({ type: 'chat' })
+  try {
+    assert.equal(f.vm.providerOptions.some((item: any) => item.value === 'chatgpt_plan'), true)
+    f.vm.formData.source = 'local'
+    await nextTick()
+    assert.equal(f.vm.providerOptions.some((item: any) => item.value === 'chatgpt_plan'), false)
+    await f.vm.selectModelType('embedding')
+    assert.equal(f.vm.providerOptions.some((item: any) => item.value === 'chatgpt_plan'), false)
+  } finally { f.close() }
+})
+
+test('ChatGPT plan picker saves only an account-authorized slug with the fixed shared URL', async () => {
+  const f = await fixture({
+    chatGPTModels: async () => [{ slug: 'gpt-6.1-sol', display_name: 'GPT-6.1 Sol' }],
+  })
+  try {
+    f.vm.handleProviderChange('chatgpt_plan')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await nextTick()
+    assert.equal(f.vm.chatGPTPlanState, 'ready')
+    assert.deepEqual(plain(f.vm.chatGPTPlanModels), [{ slug: 'gpt-6.1-sol', display_name: 'GPT-6.1 Sol' }])
+    assert.equal(f.vm.formData.baseUrl, 'https://api.openai.com/v1')
+    assert.equal(f.vm.formData.apiKey, '')
+    assert.deepEqual(plain(f.vm.formData.customHeaders), [])
+    f.vm.formData.modelName = 'gpt-6.1-sol'
+    await f.vm.handleConfirm()
+    assert.equal(f.saves.length, 1)
+    assert.equal(f.saves[0].provider, 'chatgpt_plan')
+    assert.equal(f.saves[0].modelName, 'gpt-6.1-sol')
+    assert.equal(f.chatGPTStatusCalls(), 1)
+    assert.equal(f.chatGPTModelCalls(), 1)
+  } finally { f.close() }
+})
+
+test('late ChatGPT plan catalog responses cannot populate a different provider draft', async () => {
+  const status = deferred<any>()
+  const f = await fixture({ chatGPTStatus: () => status.promise })
+  try {
+    f.vm.handleProviderChange('chatgpt_plan')
+    await nextTick()
+    f.vm.handleProviderChange('generic')
+    status.resolve({ connected: true, plan_enabled: true })
+    await Promise.resolve()
+    await Promise.resolve()
+    assert.equal(f.vm.formData.provider, 'generic')
+    assert.deepEqual(plain(f.vm.chatGPTPlanModels), [])
+    assert.notEqual(f.vm.chatGPTPlanState, 'ready')
+  } finally { status.resolve({ connected: false }); f.close() }
+})
 
 test('reopening after changing the draft type refreshes the newly selected settings tab', async () => {
   const f = await fixture()

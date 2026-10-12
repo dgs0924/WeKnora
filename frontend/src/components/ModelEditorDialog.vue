@@ -3,10 +3,10 @@
     :description="getModalDescription()" :icon="modelTypeIcon" :confirm-loading="saving" :cancel-disabled="saving"
     :confirm-text="$t('model.editor.saveAndClose')"
     :close-on-overlay-click="!saving" :close-on-esc-keydown="!saving"
-    :confirm-disabled="formData.provider === 'weknoracloud' && wkcCredentialState !== 'configured'"
+    :confirm-disabled="isChatGPTPlanExisting || (formData.provider === 'weknoracloud' && wkcCredentialState !== 'configured')"
     @update:visible="(v: boolean) => dialogVisible = v" @confirm="handleConfirm" @cancel="handleCancel">
 
-    <template v-if="formData.source === 'remote'" #footer-left>
+    <template v-if="formData.source === 'remote' && !isChatGPTPlanEditor" #footer-left>
       <t-button variant="outline" @click="checkRemoteAPI" :loading="checking"
         :disabled="saving || !formData.modelName || (!formData.baseUrl && formData.provider !== 'weknoracloud') || (formData.provider === 'weknoracloud' && wkcCredentialState !== 'configured')">
         <template #icon>
@@ -27,7 +27,7 @@
         <strong>{{ $t('modelSettings.toasts.saveFailed') }}</strong>
         <div class="connection-result__details" tabindex="0">{{ saveError }}</div>
       </div>
-      <div v-if="formData.source === 'remote'" class="connection-feedback" aria-live="polite">
+      <div v-if="formData.source === 'remote' && !isChatGPTPlanEditor" class="connection-feedback" aria-live="polite">
         <p class="connection-hint">{{ $t(isEdit ? 'model.editor.testDraftEditHint' : 'model.editor.testDraftHint') }}</p>
         <p v-if="remoteStale" class="connection-hint">{{ $t('model.editor.testStale') }}</p>
         <div v-if="remoteChecked && !remoteAvailable" class="connection-result error">
@@ -79,6 +79,7 @@
               type="button"
               class="source-option"
               :class="{ 'is-active': formData.source === 'remote' }"
+              :disabled="isChatGPTPlanExisting"
               role="radio"
               :aria-checked="formData.source === 'remote'"
               @click="formData.source = 'remote'"
@@ -91,7 +92,7 @@
               type="button"
               class="source-option"
               :class="{ 'is-active': formData.source === 'local', 'is-disabled': ollamaServiceStatus === false }"
-              :disabled="ollamaServiceStatus === false"
+              :disabled="isChatGPTPlanExisting || ollamaServiceStatus === false"
               role="radio"
               :aria-checked="formData.source === 'local'"
               @click="formData.source = 'local'"
@@ -160,7 +161,123 @@
 
       <!-- Remote API 配置 -->
       <template v-if="formData.source === 'remote'">
-        <section class="setting-drawer__section">
+        <section v-if="isChatGPTPlanEditor" class="setting-drawer__section">
+          <h4 class="setting-drawer__section-title">{{ $t('model.editor.sectionProvider') }}</h4>
+
+          <!-- Keep the provider switch here while adding a plan model. The plan
+            picker replaces connection fields, not the ability to choose a
+            different remote provider without closing and reopening the drawer. -->
+          <div v-if="!isChatGPTPlanExisting" class="form-item">
+            <label class="form-label">{{ $t('model.editor.providerLabel') }}</label>
+            <t-select v-model="formData.provider" :placeholder="$t('model.editor.providerPlaceholder')"
+              :loading="loadingProviders" filterable
+              @change="handleProviderChange"
+              :popup-props="{ overlayClassName: 'wk-popover provider-select-popup', overlayInnerStyle: matchTriggerWidth }">
+              <template #valueDisplay>
+                <span v-if="formData.provider" class="provider-value">
+                  <img v-if="selectedProviderIcon" :src="selectedProviderIcon" class="provider-icon" alt="" />
+                  <span class="provider-value__name">{{ selectedProviderDisplayLabel }}</span>
+                </span>
+              </template>
+              <t-option v-for="opt in providerOptions" :key="opt.value" :value="opt.value"
+                :label="providerDisplayLabel(opt)" :show-overflow-tooltip="false">
+                <div class="provider-option">
+                  <img v-if="providerIcon(opt)" :src="providerIcon(opt)" class="provider-icon" alt="" />
+                  <span v-else class="provider-icon provider-icon--placeholder" aria-hidden="true">
+                    {{ providerDisplayLabel(opt).slice(0, 1) }}
+                  </span>
+                  <div class="provider-option__text">
+                    <span class="provider-name">{{ providerDisplayLabel(opt) }}</span>
+                    <span class="provider-desc">{{ providerDisplayDescription(opt) }}</span>
+                  </div>
+                </div>
+              </t-option>
+            </t-select>
+          </div>
+
+          <div class="chatgpt-plan-hint">
+            <t-icon name="chat" class="chatgpt-plan-hint__icon" />
+            <div>
+              <strong>{{ $t('model.editor.chatgptPlan.title') }}</strong>
+              <p>{{ isChatGPTPlanExisting
+                ? $t('model.editor.chatgptPlan.existingHint')
+                : $t('model.editor.chatgptPlan.hint') }}</p>
+            </div>
+          </div>
+
+          <template v-if="isChatGPTPlanExisting">
+            <div class="form-item">
+              <label class="form-label">{{ $t('model.modelName') }}</label>
+              <t-input :value="formData.modelName" disabled />
+            </div>
+            <t-button variant="outline" @click="goToChatGPTSettings">
+              <template #icon><t-icon name="jump" /></template>
+              {{ $t('model.editor.chatgptPlan.goToSettings') }}
+            </t-button>
+          </template>
+
+          <template v-else>
+            <div v-if="chatGPTPlanState === 'unbound'" class="chatgpt-plan-message chatgpt-plan-message--warn">
+              <t-icon name="error-circle-filled" />
+              <div>
+                <span>{{ $t('model.editor.chatgptPlan.unbound') }}</span>
+                <t-button variant="text" size="small" @click="goToChatGPTSettings">
+                  <template #icon><t-icon name="jump" /></template>
+                  {{ $t('model.editor.chatgptPlan.goToSettings') }}
+                </t-button>
+              </div>
+            </div>
+
+            <div v-else-if="chatGPTPlanState === 'error'" class="chatgpt-plan-message chatgpt-plan-message--error">
+              <t-icon name="error-circle-filled" />
+              <div>
+                <span>{{ $t('model.editor.chatgptPlan.loadFailed') }}</span>
+                <t-button variant="text" size="small" @click="loadChatGPTPlanModels">
+                  <template #icon><t-icon name="refresh" /></template>
+                  {{ $t('model.editor.chatgptPlan.retry') }}
+                </t-button>
+              </div>
+            </div>
+
+            <div v-else-if="chatGPTPlanState === 'empty'" class="chatgpt-plan-message">
+              <t-icon name="info-circle-filled" />
+              <span>{{ $t('model.editor.chatgptPlan.empty') }}</span>
+            </div>
+
+            <div class="form-item">
+              <label class="form-label required">{{ $t('model.modelName') }}</label>
+              <div class="model-select-row">
+                <t-select
+                  v-model="formData.modelName"
+                  filterable
+                  clearable
+                  :loading="chatGPTPlanState === 'loading'"
+                  :disabled="chatGPTPlanState !== 'ready'"
+                  :placeholder="$t('model.editor.chatgptPlan.modelPlaceholder')"
+                >
+                  <t-option
+                    v-for="model in chatGPTPlanModels"
+                    :key="model.slug"
+                    :value="model.slug"
+                    :label="model.display_name || model.slug"
+                  >
+                    <div class="catalog-model-option">
+                      <span class="catalog-model-option__name">{{ model.display_name || model.slug }}</span>
+                      <span v-if="model.display_name && model.display_name !== model.slug" class="catalog-model-option__id">{{ model.slug }}</span>
+                    </div>
+                  </t-option>
+                </t-select>
+                <t-button variant="text" size="small" :loading="chatGPTPlanState === 'loading'" @click="loadChatGPTPlanModels" class="refresh-btn">
+                  <t-icon name="refresh" />
+                  {{ $t('model.editor.chatgptPlan.refresh') }}
+                </t-button>
+              </div>
+              <p class="form-desc">{{ $t('model.editor.chatgptPlan.modelHint') }}</p>
+            </div>
+          </template>
+        </section>
+
+        <section v-else class="setting-drawer__section">
           <h4 class="setting-drawer__section-title">{{ $t('model.editor.sectionProvider') }}</h4>
 
           <!-- 厂商选择器 -->
@@ -466,7 +583,7 @@
       </template>
 
       <!-- Section 3 — 高级选项（仅在有内容时渲染，避免空 section 出现底部分隔线） -->
-      <section v-if="['embedding', 'chat', 'vllm'].includes(activeModelType) || formData.source === 'remote'" class="setting-drawer__section">
+      <section v-if="!isChatGPTPlanEditor && (['embedding', 'chat', 'vllm'].includes(activeModelType) || formData.source === 'remote')" class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ $t('model.editor.sectionAdvanced') }}</h4>
 
         <!-- Embedding 专用：维度 -->
@@ -651,6 +768,7 @@ import CredentialResource, {
 import { shouldShowOllamaUnavailableTip } from '@/components/modelEditorSourceState'
 import { WEKNORA_CLOUD_PROVIDER, WKC_MODEL_KINDS, WKC_MODEL_NAME_BY_KIND } from '@/utils/weknoraCloudModels'
 import { docsUrl } from '@/utils/docsUrl'
+import { getChatGPTStatus, listChatGPTModels, type ChatGPTModel } from '@/api/chatgpt'
 
 interface CustomHeaderItem {
   key: string
@@ -718,6 +836,13 @@ const RESERVED_EXTRA_CONFIG_KEYS = new Set(['thinking_control'])
 
 type EditorModelType = 'chat' | 'embedding' | 'rerank' | 'vllm' | 'asr'
 
+const CHATGPT_PLAN_PROVIDER = 'chatgpt_plan'
+// The parent model-save path still validates a remote URL before dispatching
+// the dedicated ChatGPT subscription branch. It is never sent to OpenAI by
+// that branch, but retaining a valid fixed value keeps this editor compatible
+// with the shared form contract without exposing an editable connection URL.
+const CHATGPT_PLAN_BASE_URL = 'https://api.openai.com/v1'
+
 interface Props {
   visible: boolean
   modelType: EditorModelType
@@ -742,6 +867,15 @@ const draftModelType = ref<EditorModelType>(props.modelType)
 
 const isEdit = computed(() => !!props.modelData)
 
+/** Existing subscription rows are persisted as an ordinary OpenAI model plus this marker. */
+const isChatGPTPlanExisting = computed(() =>
+  isEdit.value && props.modelData?.extraConfig?.chatgpt_plan === 'true',
+)
+
+const isChatGPTPlanEditor = computed(() =>
+  isChatGPTPlanExisting.value || (!isEdit.value && formData.value.provider === CHATGPT_PLAN_PROVIDER),
+)
+
 const activeModelType = computed(() => (
   isEdit.value ? props.modelType : draftModelType.value
 ))
@@ -765,7 +899,24 @@ const loadProviders = async (force = false) => {
   }
 }
 
-const providerOptions = computed<ModelProviderOption[]>(() => providersStore.providersFor(activeModelType.value))
+const providerOptions = computed<ModelProviderOption[]>(() => {
+  const options = providersStore.providersFor(activeModelType.value)
+  // This is deliberately a virtual provider: it exists only while adding a
+  // remote chat model, and its model list belongs to the current user's
+  // ChatGPT connection rather than the shared server catalog.
+  if (isEdit.value || activeModelType.value !== 'chat' || formData.value.source !== 'remote') return options
+  const openAI = providersStore.providerById('openai')
+  return [{
+    value: CHATGPT_PLAN_PROVIDER,
+    label: t('model.editor.chatgptPlan.provider') as string,
+    description: t('model.editor.chatgptPlan.providerDescription') as string,
+    icon: openAI?.icon,
+    defaultUrls: { chat: CHATGPT_PLAN_BASE_URL },
+    modelTypes: ['chat'],
+    models: [],
+    order: -1,
+  }, ...options]
+})
 
 const selectedProvider = computed<ModelProviderOption | undefined>(() => {
   const id = formData.value.provider
@@ -1041,6 +1192,7 @@ const showResolvedPanel = computed(() =>
   isChatLike.value
   && formData.value.source === 'remote'
   && !!formData.value.provider
+  && !isChatGPTPlanEditor.value
   && formData.value.provider !== 'weknoracloud',
 )
 
@@ -1302,6 +1454,57 @@ const goToWeKnoraCloudSettings = async () => {
   uiStore.openSettings('weknoracloud')
 }
 
+type ChatGPTPlanState = 'idle' | 'loading' | 'unbound' | 'error' | 'empty' | 'ready'
+const chatGPTPlanState = ref<ChatGPTPlanState>('idle')
+const chatGPTPlanModels = ref<ChatGPTModel[]>([])
+let chatGPTPlanRequestRevision = 0
+
+/** Drop a late account/model response whenever this editor stops representing the plan picker. */
+const invalidateChatGPTPlanLoad = () => {
+  chatGPTPlanRequestRevision++
+  if (chatGPTPlanState.value === 'loading') chatGPTPlanState.value = 'idle'
+}
+
+const isCurrentChatGPTPlanRequest = (revision: number) =>
+  revision === chatGPTPlanRequestRevision
+  && props.visible
+  && !isEdit.value
+  && activeModelType.value === 'chat'
+  && formData.value.source === 'remote'
+  && formData.value.provider === CHATGPT_PLAN_PROVIDER
+
+const loadChatGPTPlanModels = async () => {
+  if (isChatGPTPlanExisting.value || !isChatGPTPlanEditor.value) return
+  const revision = ++chatGPTPlanRequestRevision
+  chatGPTPlanState.value = 'loading'
+  chatGPTPlanModels.value = []
+  try {
+    const status = await getChatGPTStatus()
+    if (!isCurrentChatGPTPlanRequest(revision)) return
+    if (!status.connected || status.plan_enabled === false) {
+      chatGPTPlanState.value = 'unbound'
+      return
+    }
+    const models = await listChatGPTModels()
+    if (!isCurrentChatGPTPlanRequest(revision)) return
+    chatGPTPlanModels.value = models.filter(model => !!model?.slug)
+    chatGPTPlanState.value = chatGPTPlanModels.value.length > 0 ? 'ready' : 'empty'
+  } catch (error) {
+    if (!isCurrentChatGPTPlanRequest(revision)) return
+    console.error('Failed to load ChatGPT subscription models', error)
+    chatGPTPlanState.value = 'error'
+  }
+}
+
+const goToChatGPTSettings = async () => {
+  emit('update:visible', false)
+  if (uiStore.showSettingsModal) {
+    uiStore.closeSettings()
+    await nextTick()
+  }
+  uiStore.openSettings('chatgpt')
+}
+
 const formData = ref<ModelFormData>({
   id: '',
   name: '',
@@ -1554,6 +1757,11 @@ watch(() => props.visible, (val) => {
         applyExtraFieldDefaults()
       }
     })
+    if (!isEdit.value && formData.value.provider === CHATGPT_PLAN_PROVIDER) {
+      void loadChatGPTPlanModels()
+    }
+  } else {
+    invalidateChatGPTPlanLoad()
   }
 })
 
@@ -1579,6 +1787,8 @@ watch(() => props.visible, () => {
 
 // 重置表单
 const resetForm = () => {
+  invalidateChatGPTPlanLoad()
+  chatGPTPlanModels.value = []
   legacyThinkingControlLoaded.value = false
   formData.value = {
     id: generateId(),
@@ -1670,7 +1880,12 @@ const resetModelSelectionForVendor = () => {
 }
 
 const handleProviderChange = (value: string) => {
+  // TDesign updates v-model before emitting `change`; assigning here as well
+  // makes the transition atomic for programmatic callers and prevents the
+  // account-catalog request from observing the previous provider.
+  formData.value.provider = value
   const provider = providerOptions.value.find(opt => opt.value === value)
+  if (value !== CHATGPT_PLAN_PROVIDER) invalidateChatGPTPlanLoad()
   // Older catalogs omit inherited type URLs. Mirror GetDefaultURL's chat
   // fallback, preserving an explicitly empty URL and never the previous vendor's.
   formData.value.baseUrl = provider?.defaultUrls?.[activeModelType.value]
@@ -1684,6 +1899,16 @@ const handleProviderChange = (value: string) => {
   // WeKnoraCloud: 检查凭证状态
   if (value === 'weknoracloud') {
     checkWkcCredentialStatus()
+  }
+  if (value === CHATGPT_PLAN_PROVIDER) {
+    formData.value.baseUrl = CHATGPT_PLAN_BASE_URL
+    formData.value.modelName = ''
+    formData.value.apiKey = ''
+    formData.value.appSecret = ''
+    formData.value.customHeaders = []
+    formData.value.extraConfig = {}
+    void loadChatGPTPlanModels()
+    return
   }
   if (hydratingForm.value) return
   resetModelSelectionForVendor()
@@ -1857,6 +2082,7 @@ const buildExtraConfig = (): Record<string, string> => {
 // 检查 Remote API 连接（根据模型类型调用不同的接口）
 const checkRemoteAPI = async () => {
   if (checking.value || saving.value) return
+  if (isChatGPTPlanEditor.value) return
   if (!formData.value.modelName || (!formData.value.baseUrl && formData.value.provider !== 'weknoracloud')) {
     MessagePlugin.warning(t('model.editor.fillModelAndUrl'))
     return
@@ -1999,7 +2225,7 @@ const checkRemoteAPI = async () => {
 
 // 确认保存
 const handleConfirm = async () => {
-  if (saving.value) return
+  if (saving.value || isChatGPTPlanExisting.value) return
   saving.value = true
   if (checking.value) invalidateConnectionTest()
   saveError.value = ''
@@ -2027,6 +2253,14 @@ const handleConfirm = async () => {
         new URL(formData.value.baseUrl.trim())
       } catch {
         MessagePlugin.warning(t('model.editor.validation.baseUrlInvalid'))
+        return
+      }
+    }
+
+    if (isChatGPTPlanEditor.value) {
+      const validSlug = chatGPTPlanModels.value.some(model => model.slug === formData.value.modelName)
+      if (!validSlug) {
+        MessagePlugin.warning(t('model.editor.chatgptPlan.modelRequired'))
         return
       }
     }
@@ -2177,6 +2411,7 @@ onUnmounted(() => {
     resolveTimer = null
   }
   resolveRevision++
+  invalidateChatGPTPlanLoad()
   if (downloadInterval) {
     clearInterval(downloadInterval)
   }
@@ -2184,6 +2419,17 @@ onUnmounted(() => {
 
 // 监听来源变化，清理所有状态
 watch(() => formData.value.source, () => {
+  if (formData.value.source !== 'remote') {
+    invalidateChatGPTPlanLoad()
+    // The virtual provider has no local transport. Source changes normally
+    // preserve a selected vendor, but retaining this one would allow a
+    // stale plan draft to travel through the local-model form.
+    if (!isChatGPTPlanExisting.value && formData.value.provider === CHATGPT_PLAN_PROVIDER) {
+      formData.value.provider = 'generic'
+      formData.value.modelName = ''
+      formData.value.baseUrl = ''
+    }
+  }
   // 重置校验状态
   modelChecked.value = false
   modelAvailable.value = false
@@ -2437,6 +2683,55 @@ const handleCancel = () => {
   color: var(--td-text-color-secondary);
   font-size: var(--app-text-sm);
   line-height: 1.5;
+}
+
+.chatgpt-plan-hint,
+.chatgpt-plan-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--td-brand-color-focus);
+  border-radius: var(--app-radius-md);
+  background: var(--td-brand-color-light);
+  color: var(--td-text-color-secondary);
+  font-size: var(--app-text-md);
+  line-height: 1.5;
+
+  &__icon {
+    margin-top: 2px;
+    color: var(--td-brand-color);
+    font-size: var(--app-text-xl);
+    flex-shrink: 0;
+  }
+
+  strong {
+    color: var(--td-text-color-primary);
+  }
+
+  p {
+    margin: 2px 0 0;
+  }
+}
+
+.chatgpt-plan-message {
+  &--warn {
+    border-color: var(--td-warning-color-focus);
+    background: var(--td-warning-color-light);
+  }
+
+  &--error {
+    border-color: var(--td-error-color-3);
+    background: var(--td-error-color-1);
+    color: var(--td-error-color);
+  }
+
+  :deep(.t-button) {
+    display: inline-flex;
+    margin-left: 4px;
+    padding: 0 4px;
+    height: auto;
+  }
 }
 
 .connection-result {

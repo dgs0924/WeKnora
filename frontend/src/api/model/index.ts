@@ -1,5 +1,6 @@
 import { get, post, postUpload, put, del } from '../../utils/request';
 import i18n from '@/i18n'
+import { selectChatGPTModel } from '../chatgpt'
 import { ModelInUseError, modelInUseErrorFromRequest } from './modelUsage'
 
 export * from './modelUsage'
@@ -119,6 +120,18 @@ export function copyModelConfig(id: string, displayName: string): Promise<ModelC
 
 // 创建模型
 export function createModel(data: ModelConfig): Promise<ModelConfig> {
+  // Personal plan entries use the authenticated account's catalog and never
+  // send API credentials or user-supplied connection settings to /models.
+  if (data.parameters.provider === 'chatgpt_plan') {
+    if (data.source !== 'remote' || data.type !== 'KnowledgeQA' || !data.name.trim()) {
+      return Promise.reject(new Error(t('error.model.createFailed')))
+    }
+    return selectChatGPTModel(data.name.trim()).then((result) => {
+      if (!result.model_id) throw new Error(t('error.model.createFailed'))
+      return getModel(result.model_id)
+    })
+  }
+
   return new Promise((resolve, reject) => {
     post('/api/v1/models', data)
       .then((response: any) => {
