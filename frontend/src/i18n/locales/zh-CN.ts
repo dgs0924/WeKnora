@@ -3175,7 +3175,7 @@ export default {
         modelHint: '只能选择当前账号授权的模型。', modelRequired: '请选择当前 ChatGPT 账号可用的模型。',
         unsupportedModelType: 'ChatGPT 套餐仅支持对话和视觉模型。',
       },
-      codexCli: { sourceLabel: '账号授权', title: '账号授权模型', channelLabel: '授权渠道', channelChatGPTServer: 'ChatGPT（服务器账号）', hint: '使用服务器已登录账号的对话模型，无需 API Key 或 Base URL。', existingHint: '此模型由服务器账号管理。', existingReadonly: '已启用的服务器模型不能在这里修改。', unavailable: '服务器账号当前不可用，无法读取模型目录。', loadFailed: '加载服务器模型目录失败。', empty: '服务器账号没有可用模型。', modelPlaceholder: '选择服务器模型', modelHint: '当前仅支持 ChatGPT（服务器账号）对话模型。', modelRequired: '请选择服务器账号可用的模型。', unsupportedModelType: '账号授权当前仅支持对话模型。' },
+      codexCli: { channelPersonal: 'ChatGPT（个人账号）', accountUnsupported: '账号授权支持个人账号的对话、视觉模型及服务器账号的对话模型。', sourceLabel: '账号授权', title: '账号授权模型', channelLabel: '授权渠道', channelChatGPTServer: 'ChatGPT（服务器账号）', hint: '使用服务器已登录账号的对话模型，无需 API Key 或 Base URL。', existingHint: '此模型由服务器账号管理。', existingReadonly: '已启用的服务器模型不能在这里修改。', unavailable: '服务器账号当前不可用，无法读取模型目录。', loadFailed: '加载服务器模型目录失败。', empty: '服务器账号没有可用模型。', modelPlaceholder: '选择服务器模型', modelHint: '当前仅支持 ChatGPT（服务器账号）对话模型。', modelRequired: '请选择服务器账号可用的模型。', unsupportedModelType: '账号授权当前仅支持对话模型。' },
       validation: {
         extraFieldRequired: '请填写 {name}',
         modelNameRequired: '请输入模型名称',

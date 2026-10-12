@@ -173,11 +173,9 @@ for (const type of ['embedding', 'rerank', 'vllm', 'asr']) {
       assert.deepEqual(f.catalogRequests, [{ type, force: true }])
       assert.equal(f.vm.activeModelType, type)
       assert.deepEqual(
-        Array.from(f.vm.providerOptions, (p: any) => p.value).filter(value => value !== 'chatgpt_plan'),
+        Array.from(f.vm.providerOptions, (p: any) => p.value),
         ['vendor'],
       )
-      const plan = f.vm.providerOptions.find((p: any) => p.value === 'chatgpt_plan')
-      assert.equal(!!plan?.disabled, !['vllm'].includes(type))
       f.vm.formData.provider = 'vendor'
       f.vm.formData.modelName = ''
       assert.deepEqual(Array.from(f.vm.catalogModelOptions, (m: any) => m.value), [`${type}-model`])
@@ -185,19 +183,11 @@ for (const type of ['embedding', 'rerank', 'vllm', 'asr']) {
   })
 }
 
-test('ChatGPT plan provider is offered for every new remote model type, but only chat and VLM can select it', async () => {
+test('account authorization is absent from the API provider menu', async () => {
   for (const type of ['chat', 'vllm', 'embedding', 'rerank', 'asr'] as const) {
     const f = await fixture({ type })
     try {
-      const plan = f.vm.providerOptions.find((item: any) => item.value === 'chatgpt_plan')
-      assert.ok(plan, type)
-      assert.equal(!!plan.disabled, !['chat', 'vllm'].includes(type), type)
-      if (!['chat', 'vllm'].includes(type)) {
-        const initialProvider = f.vm.formData.provider
-        f.vm.handleProviderChange('chatgpt_plan')
-        assert.equal(f.vm.formData.provider, initialProvider)
-        assert.deepEqual(f.toasts, ['model.editor.chatgptPlan.unsupportedModelType'])
-      }
+      assert.equal(f.vm.providerOptions.some((item: any) => item.value === 'chatgpt_plan'), false, type)
       f.vm.formData.source = 'local'
       await nextTick()
       assert.equal(f.vm.providerOptions.some((item: any) => item.value === 'chatgpt_plan'), false)
@@ -213,7 +203,7 @@ test('account authorization is a source flow, not a provider option, and API swi
   f.vm.selectRemoteSource()
   assert.equal(f.vm.formData.provider, 'vendor')
   assert.equal(f.vm.formData.modelName, 'typed-api-model')
-  f.vm.selectCodexSource()
+  f.vm.selectAccountAuthSource()
   await nextTick()
   assert.equal(f.vm.formData.provider, 'codex_cli')
   assert.equal(f.vm.formData.source, 'remote')
@@ -226,7 +216,7 @@ test('account authorization is a source flow, not a provider option, and API swi
 
 test('account authorization loads the server catalog only for chat and rejects unavailable or unsupported selections', async () => {
   const f = await fixture({ type: 'chat', codexStatus: async () => ({ enabled: false, connected: false }) })
-  f.vm.selectCodexSource()
+  f.vm.selectAccountAuthSource()
   await new Promise(resolve => setTimeout(resolve, 0)); await nextTick()
   assert.equal(f.codexStatusCalls(), 1)
   assert.equal(f.codexModelCalls(), 0)
@@ -236,7 +226,7 @@ test('account authorization loads the server catalog only for chat and rejects u
   f.close()
 
   const nonChat = await fixture({ type: 'embedding' })
-  nonChat.vm.selectCodexSource()
+  nonChat.vm.selectAccountAuthSource()
   assert.notEqual(nonChat.vm.formData.provider, 'codex_cli')
   assert.equal(nonChat.codexStatusCalls(), 0)
   nonChat.close()
@@ -316,8 +306,6 @@ test('changing from a selected ChatGPT plan type to an unsupported type clears t
     assert.equal(f.vm.formData.provider, 'generic')
     assert.equal(f.vm.formData.modelName, '')
     assert.equal(f.vm.formData.baseUrl, '')
-    const plan = f.vm.providerOptions.find((item: any) => item.value === 'chatgpt_plan')
-    assert.equal(plan.disabled, true)
   } finally { f.close() }
 })
 
@@ -1427,5 +1415,54 @@ test('opening the model editor refreshes its catalog candidates', async () => {
     f.props.visible = true
     await nextTick()
     assert.equal(f.catalogEvents[0], 'refresh')
+  } finally { f.close() }
+})
+
+test('personal and server channels share authorization source and clear old model selections', async () => {
+  const f = await fixture()
+  try {
+    f.vm.selectAccountAuthSource()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(f.vm.isAccountAuthEditor, true)
+    f.vm.formData.modelName = 'server-chat'
+    f.vm.changeAccountAuthorizationChannel('personal')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(f.vm.formData.provider, 'chatgpt_plan')
+    assert.equal(f.vm.formData.modelName, '')
+    assert.equal(f.vm.isAccountAuthEditor, true)
+    assert.equal(f.vm.providerOptions.some((p: any) => ['chatgpt_plan', 'codex_cli'].includes(p.value)), false)
+    f.vm.selectRemoteSource()
+    assert.equal(f.vm.formData.provider, 'generic')
+    assert.equal(f.vm.isAccountAuthEditor, false)
+  } finally { f.close() }
+})
+
+test('vision authorization selects personal account and refuses server channel', async () => {
+  const f = await fixture({ type: 'vllm' })
+  try {
+    f.vm.selectAccountAuthSource()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(f.vm.formData.provider, 'chatgpt_plan')
+    assert.equal(f.vm.isAccountAuthEditor, true)
+    f.vm.changeAccountAuthorizationChannel('server')
+    assert.equal(f.vm.formData.provider, 'chatgpt_plan')
+    assert.equal(f.codexStatusCalls(), 0)
+    assert.deepEqual(f.chatGPTModelTypes(), ['VLLM'])
+  } finally { f.close() }
+})
+
+test('late personal catalog does not replace the selected server channel', async () => {
+  const pending = deferred<any[]>()
+  const f = await fixture({ chatGPTModels: () => pending.promise })
+  try {
+    f.vm.changeAccountAuthorizationChannel('personal')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    f.vm.changeAccountAuthorizationChannel('server')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    pending.resolve([{ slug: 'personal-old', display_name: 'Old' }])
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(f.vm.formData.provider, 'codex_cli')
+    assert.equal(f.vm.codexState, 'ready')
+    assert.equal(f.vm.chatGPTPlanModels.some((m: any) => m.slug === 'personal-old'), false)
   } finally { f.close() }
 })

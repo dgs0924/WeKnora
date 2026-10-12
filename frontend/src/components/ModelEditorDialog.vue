@@ -78,10 +78,10 @@
             <button
               type="button"
               class="source-option source-option--api"
-              :class="{ 'is-active': formData.source === 'remote' && !isCodexEditor }"
+              :class="{ 'is-active': formData.source === 'remote' && !isAccountAuthEditor }"
               :disabled="isChatGPTPlanExisting || isCodexExisting"
               role="radio"
-              :aria-checked="formData.source === 'remote' && !isCodexEditor"
+              :aria-checked="formData.source === 'remote' && !isAccountAuthEditor"
               @click="selectRemoteSource"
             >
               <t-icon name="cloud" class="source-option__icon" />
@@ -103,18 +103,18 @@
             <button
               type="button"
               class="source-option source-option--account"
-              :class="{ 'is-active': isCodexEditor }"
-              :disabled="isChatGPTPlanExisting || isCodexExisting || activeModelType !== 'chat'"
+              :class="{ 'is-active': isAccountAuthEditor }"
+              :disabled="isChatGPTPlanExisting || isCodexExisting || !['chat', 'vllm'].includes(activeModelType)"
               role="radio"
-              :aria-checked="isCodexEditor"
-              @click="selectCodexSource"
+              :aria-checked="isAccountAuthEditor"
+              @click="selectAccountAuthSource"
             >
               <t-icon name="server" class="source-option__icon" />
               <span class="source-option__label">{{ $t('model.editor.codexCli.sourceLabel') }}</span>
             </button>
           </div>
 
-          <p v-if="activeModelType !== 'chat'" class="form-desc">{{ $t('model.editor.codexCli.unsupportedModelType') }}</p>
+          <p v-if="!['chat', 'vllm'].includes(activeModelType)" class="form-desc">{{ $t('model.editor.codexCli.accountUnsupported') }}</p>
 
           <!-- Ollama不可用时的提示信息 -->
           <div v-if="shouldShowOllamaUnavailableTip(formData.source, activeModelType, ollamaServiceStatus)"
@@ -177,37 +177,7 @@
       <template v-if="formData.source === 'remote'">
         <section v-if="isChatGPTPlanEditor" class="setting-drawer__section">
           <h4 class="setting-drawer__section-title">{{ $t('model.editor.sectionProvider') }}</h4>
-
-          <!-- Keep the provider switch here while adding a plan model. The plan
-            picker replaces connection fields, not the ability to choose a
-            different remote provider without closing and reopening the drawer. -->
-          <div v-if="!isChatGPTPlanExisting" class="form-item">
-            <label class="form-label">{{ $t('model.editor.providerLabel') }}</label>
-            <t-select v-model="formData.provider" :placeholder="$t('model.editor.providerPlaceholder')"
-              :loading="loadingProviders" filterable
-              @change="handleProviderChange"
-              :popup-props="{ overlayClassName: 'wk-popover provider-select-popup', overlayInnerStyle: matchTriggerWidth }">
-              <template #valueDisplay>
-                <span v-if="formData.provider" class="provider-value">
-                  <img v-if="selectedProviderIcon" :src="selectedProviderIcon" class="provider-icon" alt="" />
-                  <span class="provider-value__name">{{ selectedProviderDisplayLabel }}</span>
-                </span>
-              </template>
-              <t-option v-for="opt in providerOptions" :key="opt.value" :value="opt.value"
-                :label="providerDisplayLabel(opt)" :disabled="opt.disabled" :show-overflow-tooltip="false">
-                <div class="provider-option">
-                  <img v-if="providerIcon(opt)" :src="providerIcon(opt)" class="provider-icon" alt="" />
-                  <span v-else class="provider-icon provider-icon--placeholder" aria-hidden="true">
-                    {{ providerDisplayLabel(opt).slice(0, 1) }}
-                  </span>
-                  <div class="provider-option__text">
-                    <span class="provider-name">{{ providerDisplayLabel(opt) }}</span>
-                    <span class="provider-desc">{{ providerDisplayDescription(opt) }}</span>
-                  </div>
-                </div>
-              </t-option>
-            </t-select>
-          </div>
+          <div class="form-item"><label class="form-label">{{ $t('model.editor.codexCli.channelLabel') }}</label><t-select :model-value="'personal'" :disabled="isChatGPTPlanExisting" @change="(v: 'personal' | 'server') => changeAccountAuthorizationChannel(v)"><t-option value="personal" :label="$t('model.editor.codexCli.channelPersonal')" /><t-option value="server" :label="$t('model.editor.codexCli.channelChatGPTServer')" :disabled="activeModelType === 'vllm'" /></t-select></div>
 
           <div class="chatgpt-plan-hint">
             <t-icon name="chat" class="chatgpt-plan-hint__icon" />
@@ -295,8 +265,9 @@
           <h4 class="setting-drawer__section-title">{{ $t('model.editor.sectionProvider') }}</h4>
           <div class="form-item">
             <label class="form-label">{{ $t('model.editor.codexCli.channelLabel') }}</label>
-            <t-select v-model="codexAuthorizationChannel" disabled>
-              <t-option value="chatgpt_server" :label="$t('model.editor.codexCli.channelChatGPTServer')" />
+            <t-select :model-value="'server'" :disabled="isCodexExisting" @change="(v: 'personal' | 'server') => changeAccountAuthorizationChannel(v)">
+              <t-option value="personal" :label="$t('model.editor.codexCli.channelPersonal')" />
+              <t-option value="server" :label="$t('model.editor.codexCli.channelChatGPTServer')" />
             </t-select>
           </div>
           <div class="chatgpt-plan-hint">
@@ -937,6 +908,7 @@ const isChatGPTPlanEditor = computed(() =>
 const isCodexEditor = computed(() =>
   isCodexExisting.value || (!isEdit.value && formData.value.provider === CODEX_CLI_PROVIDER),
 )
+const isAccountAuthEditor = computed(() => isChatGPTPlanEditor.value || isCodexEditor.value)
 
 const activeModelType = computed(() => (
   isEdit.value ? props.modelType : draftModelType.value
@@ -963,26 +935,7 @@ const loadProviders = async (force = false) => {
 
 const providerOptions = computed<ProviderOptionWithDisabled[]>(() => {
   const options = providersStore.providersFor(activeModelType.value)
-  // This is deliberately a virtual provider: its model list belongs to the
-  // current user's ChatGPT connection rather than the shared server catalog.
-  // Show it for every remote model type so the picker explains its limits;
-  // only Responses-supported chat and VLM types can actually select it.
-  if (isEdit.value || formData.value.source !== 'remote') return options
-  const openAI = providersStore.providerById('openai')
-  const supported = chatGPTPlanSupportedModelType(activeModelType.value)
-  return [{
-    value: CHATGPT_PLAN_PROVIDER,
-    label: t('model.editor.chatgptPlan.provider') as string,
-    description: t(supported
-      ? 'model.editor.chatgptPlan.providerDescription'
-      : 'model.editor.chatgptPlan.unsupportedProviderDescription') as string,
-    icon: openAI?.icon,
-    defaultUrls: { chat: CHATGPT_PLAN_BASE_URL, vllm: CHATGPT_PLAN_BASE_URL },
-    modelTypes: ['chat', 'vllm'],
-    models: [],
-    order: -1,
-    disabled: !supported,
-  }, ...options]
+  return options
 })
 
 const selectedProvider = computed<ModelProviderOption | undefined>(() => {
@@ -1569,7 +1522,7 @@ const loadChatGPTPlanModels = async () => {
 type CodexEditorState = 'idle' | 'loading' | 'unavailable' | 'error' | 'empty' | 'ready'
 const codexState = ref<CodexEditorState>('idle')
 const codexModelsForEditor = ref<CodexModel[]>([])
-const codexAuthorizationChannel = ref('chatgpt_server')
+const accountAuthorizationChannel = ref<'personal' | 'server'>('server')
 let codexEditorRequestRevision = 0
 
 const invalidateCodexEditorLoad = () => {
@@ -2044,17 +1997,24 @@ const handleProviderChange = (value: string) => {
   applyExtraFieldDefaults()
 }
 
-const selectCodexSource = () => {
-  if (activeModelType.value !== 'chat') {
-    MessagePlugin.warning(t('model.editor.codexCli.unsupportedModelType'))
+const selectAccountAuthSource = () => {
+  if (activeModelType.value !== 'chat' && activeModelType.value !== 'vllm') {
+    MessagePlugin.warning(t('model.editor.codexCli.accountUnsupported'))
     return
   }
   formData.value.source = 'remote'
-  handleProviderChange(CODEX_CLI_PROVIDER)
+  accountAuthorizationChannel.value = activeModelType.value === 'vllm' ? 'personal' : 'server'
+  handleProviderChange(accountAuthorizationChannel.value === 'personal' ? CHATGPT_PLAN_PROVIDER : CODEX_CLI_PROVIDER)
+}
+
+const changeAccountAuthorizationChannel = (channel: 'personal' | 'server') => {
+  if (channel === 'server' && activeModelType.value !== 'chat') return
+  accountAuthorizationChannel.value = channel
+  handleProviderChange(channel === 'personal' ? CHATGPT_PLAN_PROVIDER : CODEX_CLI_PROVIDER)
 }
 
 const selectRemoteSource = () => {
-  if (!isCodexEditor.value) { formData.value.source = 'remote'; return }
+  if (!isAccountAuthEditor.value) { formData.value.source = 'remote'; return }
   invalidateCodexEditorLoad()
   codexModelsForEditor.value = []
   formData.value.modelName = ''

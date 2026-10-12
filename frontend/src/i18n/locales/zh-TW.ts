@@ -3175,7 +3175,7 @@ export default {
         modelHint: '只能選擇目前帳號授權的模型。', modelRequired: '請選擇目前 ChatGPT 帳號可用的模型。',
         unsupportedModelType: 'ChatGPT 方案只支援對話與視覺模型。',
       },
-      codexCli: { sourceLabel: '帳號授權', title: '帳號授權模型', channelLabel: '授權渠道', channelChatGPTServer: 'ChatGPT（伺服器帳號）', hint: '使用伺服器已登入帳號的對話模型。', existingHint: '此模型由伺服器帳號管理。', existingReadonly: '已啟用的伺服器模型不能在這裡修改。', unavailable: '伺服器帳號目前不可用。', loadFailed: '無法載入伺服器模型目錄。', empty: '伺服器帳號沒有可用模型。', modelPlaceholder: '選擇伺服器模型', modelHint: '目前僅支援 ChatGPT（伺服器帳號）對話模型。', modelRequired: '請選擇伺服器可用模型。', unsupportedModelType: '帳號授權目前僅支援對話模型。' },
+      codexCli: { channelPersonal: 'ChatGPT（個人帳號）', accountUnsupported: '帳號授權支援個人帳號的對話、視覺模型及伺服器帳號的對話模型。', sourceLabel: '帳號授權', title: '帳號授權模型', channelLabel: '授權渠道', channelChatGPTServer: 'ChatGPT（伺服器帳號）', hint: '使用伺服器已登入帳號的對話模型。', existingHint: '此模型由伺服器帳號管理。', existingReadonly: '已啟用的伺服器模型不能在這裡修改。', unavailable: '伺服器帳號目前不可用。', loadFailed: '無法載入伺服器模型目錄。', empty: '伺服器帳號沒有可用模型。', modelPlaceholder: '選擇伺服器模型', modelHint: '目前僅支援 ChatGPT（伺服器帳號）對話模型。', modelRequired: '請選擇伺服器可用模型。', unsupportedModelType: '帳號授權目前僅支援對話模型。' },
       validation: {
         extraFieldRequired: '請填寫 {name}',
         modelNameRequired: '請輸入模型名稱',

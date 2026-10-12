@@ -3167,7 +3167,7 @@ export default {
         modelHint: '현재 계정에 승인된 모델만 선택할 수 있습니다.', modelRequired: '현재 ChatGPT 계정에서 사용할 수 있는 모델을 선택하세요.',
         unsupportedModelType: 'ChatGPT 플랜은 대화와 비전 모델만 지원합니다.',
       },
-      codexCli: { sourceLabel: '계정 인증', title: '계정 인증 모델', channelLabel: '인증 채널', channelChatGPTServer: 'ChatGPT(서버 계정)', hint: '서버에 로그인된 계정의 대화 모델을 사용합니다.', existingHint: '이 모델은 서버 계정에서 관리됩니다.', existingReadonly: '활성화된 서버 모델은 여기서 편집할 수 없습니다.', unavailable: '서버 계정을 현재 사용할 수 없습니다.', loadFailed: '서버 모델 목록을 불러오지 못했습니다.', empty: '사용 가능한 모델이 없습니다.', modelPlaceholder: '서버 모델 선택', modelHint: '현재 ChatGPT(서버 계정) 대화 모델만 지원합니다.', modelRequired: '서버 계정에서 사용 가능한 모델을 선택하세요.', unsupportedModelType: '계정 인증은 대화 모델만 지원합니다.' },
+      codexCli: { channelPersonal: 'ChatGPT (개인 계정)', accountUnsupported: '계정 인증은 개인 계정의 대화·비전 모델과 서버 계정의 대화 모델을 지원합니다.', sourceLabel: '계정 인증', title: '계정 인증 모델', channelLabel: '인증 채널', channelChatGPTServer: 'ChatGPT(서버 계정)', hint: '서버에 로그인된 계정의 대화 모델을 사용합니다.', existingHint: '이 모델은 서버 계정에서 관리됩니다.', existingReadonly: '활성화된 서버 모델은 여기서 편집할 수 없습니다.', unavailable: '서버 계정을 현재 사용할 수 없습니다.', loadFailed: '서버 모델 목록을 불러오지 못했습니다.', empty: '사용 가능한 모델이 없습니다.', modelPlaceholder: '서버 모델 선택', modelHint: '현재 ChatGPT(서버 계정) 대화 모델만 지원합니다.', modelRequired: '서버 계정에서 사용 가능한 모델을 선택하세요.', unsupportedModelType: '계정 인증은 대화 모델만 지원합니다.' },
       validation: {
         extraFieldRequired: '{name}을(를) 입력하세요',
         modelNameRequired: '모델 이름을 입력해주세요',
