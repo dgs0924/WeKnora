@@ -20,6 +20,26 @@ export interface CodexModelGrant {
   user_ids: string[]
 }
 
+export interface CodexUsageWindow {
+  kind: 'primary' | 'secondary'
+  used_percent: number | null
+  remaining_percent: number | null
+  window_duration_mins: number | null
+  resets_at: number | null
+}
+
+export interface CodexUsageLimit {
+  id: string
+  name: string
+  windows: CodexUsageWindow[]
+}
+
+export interface CodexUsage {
+  available: boolean
+  limits: CodexUsageLimit[]
+  updated_at?: string
+}
+
 export interface CodexGrantUser {
   id: string
   username: string
@@ -34,6 +54,34 @@ interface CodexModelGrantsResponse {
 interface CodexGrantUsersResponse {
   users: CodexGrantUser[]
   has_more: boolean
+}
+
+function nullableNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function normalizeUsageWindow(value: Partial<CodexUsageWindow> | null | undefined): CodexUsageWindow {
+  return {
+    kind: value?.kind === 'secondary' ? 'secondary' : 'primary',
+    used_percent: nullableNumber(value?.used_percent),
+    remaining_percent: nullableNumber(value?.remaining_percent),
+    window_duration_mins: nullableNumber(value?.window_duration_mins),
+    resets_at: nullableNumber(value?.resets_at),
+  }
+}
+
+export function normalizeCodexUsage(value: Partial<CodexUsage> | null | undefined): CodexUsage {
+  return {
+    available: value?.available === true,
+    limits: Array.isArray(value?.limits)
+      ? value!.limits.map((limit) => ({
+        id: typeof limit?.id === 'string' ? limit.id : '',
+        name: typeof limit?.name === 'string' ? limit.name : '',
+        windows: Array.isArray(limit?.windows) ? limit.windows.map(normalizeUsageWindow) : [],
+      }))
+      : [],
+    updated_at: typeof value?.updated_at === 'string' ? value.updated_at : undefined,
+  }
 }
 
 export interface CodexModel {
@@ -58,6 +106,10 @@ function payload<T>(response: T | { data?: T }): T {
 
 export async function getCodexStatus(): Promise<CodexConnectionStatus> {
   return payload<CodexConnectionStatus>(await get(`${endpoint}/status`) as unknown as CodexConnectionStatus)
+}
+
+export async function getCodexUsage(): Promise<CodexUsage> {
+  return normalizeCodexUsage(payload<CodexUsage>(await get(`${endpoint}/usage`) as unknown as CodexUsage))
 }
 
 export async function listCodexModels(): Promise<CodexModel[]> {

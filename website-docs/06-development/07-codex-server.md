@@ -53,6 +53,18 @@ Codex 官方集成及适用范围见 [App Server 文档](https://learn.chatgpt.c
 升级会应用 PostgreSQL `000116` / SQLite `000036` 迁移，创建空的授权表，
 不会自动授权任何用户。数据库降级会删除该表，降级前应备份授权记录。
 
+## 套餐用量
+
+服务器账号页通过官方 `account/rateLimits/read` 获取当前用量快照，显示实际返回的
+计费窗口、已用和剩余百分比以及本地时区的重置时间。数据是整个服务器 Codex
+账号的共享用量，不是 WeKnora 独占用量，也不是按被授权用户统计。
+
+只有连接所有者可读取 `/api/v1/codex/usage`；授予模型权限不会授予读取账号用量的
+权限。进入已连接账号页或手动刷新时读取，无自动轮询。读取失败或上游未返回
+有效百分比时显示暂不可用，不把缺失数据当作零用量。此接口不消费额度重置次数。
+
+接口来源：[Codex App Server 用量窗口](https://learn.chatgpt.com/docs/app-server#6-rate-limits-chatgpt)。
+
 ## 调用边界
 
 - 仅对话模型。Embedding、ReRank、语音和图片输入不通过此入口提供。

@@ -22,6 +22,9 @@ func TestMain(m *testing.M) {
 	case "status":
 		codexHelperStatus()
 		os.Exit(0)
+	case "usage":
+		codexHelperUsage()
+		os.Exit(0)
 	case "stream", "flood", "schema":
 		codexHelperStream()
 		os.Exit(0)
@@ -43,6 +46,14 @@ func TestRuntimeStatusUsesOnlyAppServerAccountMetadata(t *testing.T) {
 	}
 	if !status.LoggedIn || status.Email != "person@example.test" || status.Plan != "plus" {
 		t.Fatalf("unexpected status: %#v", status)
+	}
+}
+
+func TestRuntimeUsageReadsRateLimitsRPC(t *testing.T) {
+	r := testRuntime(t, "usage")
+	got, err := r.Usage(context.Background())
+	if err != nil || !got.Available || len(got.Limits) != 2 {
+		t.Fatalf("usage=%#v err=%v", got, err)
 	}
 }
 
@@ -255,6 +266,21 @@ func codexHelperStatus() {
 		os.Exit(12)
 	}
 	writeRPC(out, map[string]any{"jsonrpc": "2.0", "id": json.RawMessage(req.ID), "result": map[string]any{"requiresOpenaiAuth": true, "account": map[string]any{"type": "chatgpt", "email": "person@example.test", "planType": "plus", "access_token": "must-not-leak"}}})
+}
+
+func codexHelperUsage() {
+	in := bufio.NewScanner(os.Stdin)
+	out := bufio.NewWriter(os.Stdout)
+	defer out.Flush()
+	var req rpcEnvelope
+	readRPC(in, &req)
+	writeRPC(out, map[string]any{"jsonrpc": "2.0", "id": json.RawMessage(req.ID), "result": map[string]any{}})
+	readRPC(in, &req)
+	readRPC(in, &req)
+	if req.Method != "account/rateLimits/read" {
+		os.Exit(13)
+	}
+	writeRPC(out, map[string]any{"jsonrpc": "2.0", "id": json.RawMessage(req.ID), "result": map[string]any{"rateLimits": map[string]any{"limitId": "fallback", "primary": map[string]any{"usedPercent": 20}}, "rateLimitsByLimitId": map[string]any{"five": map[string]any{"limitId": "five", "primary": map[string]any{"usedPercent": 30}}, "week": map[string]any{"limitId": "week", "primary": map[string]any{"usedPercent": 40}}}}})
 }
 
 func codexHelperStream() {

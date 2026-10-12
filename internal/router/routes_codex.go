@@ -13,6 +13,7 @@ func RegisterCodexRoutes(r *gin.RouterGroup, h *handler.CodexHandler) {
 	}
 	g := r.Group("/codex")
 	g.GET("/status", h.Status)
+	g.GET("/usage", h.Usage)
 	g.GET("/models", h.Models)
 	g.POST("/models/select", h.SelectModel)
 	g.GET("/grants", h.Grants)

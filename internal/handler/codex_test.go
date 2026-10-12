@@ -95,6 +95,23 @@ func TestCodexOwnerSeesConfigurationFailureWithoutAccountDisclosure(t *testing.T
 	require.NotContains(t, w.Body.String(), "email")
 }
 
+func TestCodexUsageRejectsOtherUsersAndAPIKeys(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := &CodexHandler{connection: &service.CodexConnection{Owner: "owner"}}
+	for _, tc := range []struct {
+		uid  string
+		api  bool
+		code int
+	}{{"other", false, http.StatusUnauthorized}, {"owner", true, http.StatusUnauthorized}, {"owner", false, http.StatusBadGateway}} {
+		r := gin.New()
+		r.Use(func(c *gin.Context) { c.Request = codexHandlerContext(c.Request, tc.uid, false, tc.api) })
+		r.GET("/usage", h.Usage)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/usage", nil))
+		require.Equal(t, tc.code, w.Code)
+	}
+}
+
 func TestCodexGrantManagementAuthorizationAndEmptyACL(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := &codexHandlerRepo{models: []*types.Model{{ID: "m1", Name: "gpt", DisplayName: "Codex · GPT"}}}

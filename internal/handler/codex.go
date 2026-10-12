@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Tencent/WeKnora/internal/application/service"
 	apperrors "github.com/Tencent/WeKnora/internal/errors"
@@ -67,6 +69,24 @@ func (h *CodexHandler) Status(c *gin.Context) {
 		result["plan"] = status.Plan
 	}
 	c.JSON(http.StatusOK, result)
+}
+
+func (h *CodexHandler) Usage(c *gin.Context) {
+	if _, ok := h.owner(c); !ok {
+		return
+	}
+	if h.connection == nil || h.connection.Runtime == nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Codex usage is unavailable"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
+	defer cancel()
+	usage, err := h.connection.Runtime.Usage(ctx)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Codex usage is unavailable"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"available": usage.Available, "limits": usage.Limits, "updated_at": time.Now().UTC().Format(time.RFC3339)})
 }
 
 type codexGrantModelResponse struct {

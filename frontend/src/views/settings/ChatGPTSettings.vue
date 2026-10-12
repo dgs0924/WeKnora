@@ -158,6 +158,42 @@
           {{ t('codexSettings.notConnectedDescription') }}
         </t-alert>
 
+        <section class="chatgpt-settings__usage-card">
+          <div class="chatgpt-settings__usage-card-heading">
+            <div>
+              <h3>{{ t('codexSettings.usageCardTitle') }}</h3>
+              <p>{{ t('codexSettings.usageCardHint') }}</p>
+            </div>
+            <t-button variant="text" size="small" :loading="codexUsageLoading" :disabled="!codexStatus.connected" @click="loadCodexUsage">
+              {{ t('common.refresh') }}
+            </t-button>
+          </div>
+          <div v-if="codexUsageLoading" class="chatgpt-settings__usage-unavailable"><t-loading size="small" /></div>
+          <t-alert v-else-if="codexUsageLoadFailed" theme="warning" :title="t('codexSettings.usageUnavailable')" />
+          <t-empty v-else-if="!codexUsage?.available || codexUsage.limits.length === 0" :description="t('codexSettings.usageUnavailable')" />
+          <div v-else class="chatgpt-settings__usage-limits">
+            <p v-if="usageUpdatedAtForLocale(codexUsage.updated_at)" class="chatgpt-settings__usage-updated">
+              {{ t('codexSettings.usageUpdatedAt', { time: usageUpdatedAtForLocale(codexUsage.updated_at) }) }}
+            </p>
+            <template v-for="limit in codexUsage.limits" :key="limit.id || limit.name">
+              <div v-for="window in limit.windows.filter(usableUsageWindow)" :key="`${limit.id}-${window.kind}`" class="chatgpt-settings__usage-window">
+                <div class="chatgpt-settings__usage-window-label">
+                  <span>{{ limit.name || limit.id }}</span>
+                  <span v-if="usageWindowDurationForLocale(window.window_duration_mins)">{{ usageWindowDurationForLocale(window.window_duration_mins) }}</span>
+                </div>
+                <div v-if="usagePercent(window.used_percent) !== null" class="chatgpt-settings__usage-bar" role="progressbar" :aria-label="`${limit.name || limit.id} ${t('codexSettings.usageUsed', { percent: usagePercent(window.used_percent) })}`" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="usagePercent(window.used_percent)!">
+                  <span :style="{ width: `${usagePercent(window.used_percent)}%` }" />
+                </div>
+                <div class="chatgpt-settings__usage-window-meta">
+                  <span>{{ t('codexSettings.usageUsed', { percent: usagePercent(window.used_percent) ?? t('common.noData') }) }}</span>
+                  <span>{{ t('codexSettings.usageRemaining', { percent: usagePercent(window.remaining_percent) ?? t('common.noData') }) }}</span>
+                  <span v-if="usageResetAtForLocale(window.resets_at)">{{ t('codexSettings.usageResetsAt', { time: usageResetAtForLocale(window.resets_at) }) }}</span>
+                </div>
+              </div>
+            </template>
+          </div>
+        </section>
+
         <template v-if="codexStatus.connected">
           <div v-if="codexModelsLoading" class="chatgpt-settings__models-loading">
             <t-loading :text="t('codexSettings.modelsLoading')" size="small" />
@@ -279,6 +315,7 @@ import {
 import { chatGPTAuthorizationOutcome } from '@/api/chatgptAuthorization'
 import {
   getCodexStatus,
+  getCodexUsage,
   listCodexGrantUsers,
   listCodexModelGrants,
   listCodexModels,
@@ -288,12 +325,14 @@ import {
   type CodexModel,
   type CodexModelGrant,
   type CodexGrantUser,
+  type CodexUsage,
 } from '@/api/codex'
+import { usagePercent, usageResetAt, usageUpdatedAt, usageWindowDuration, usableUsageWindow } from '@/api/codexUsage'
 import { useAuthStore } from '@/stores/auth'
 import { useChatResourcesStore } from '@/stores/chatResources'
 import { grantSelectionForUser, toggleGrantSelection } from '@/api/codexGrantState'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const chatResources = useChatResourcesStore()
 const authStore = useAuthStore()
 
@@ -317,6 +356,10 @@ const selectingCodexSlug = ref('')
 const codexStatus = ref<CodexConnectionStatus | null>(null)
 const codexModels = ref<CodexModel[]>([])
 const enabledCodexModelSlugs = ref(new Set<string>())
+const codexUsage = ref<CodexUsage | null>(null)
+const codexUsageLoading = ref(false)
+const codexUsageLoadFailed = ref(false)
+let codexUsageRequest = 0
 const activeAccountTab = ref<'server' | 'personal'>('personal')
 let accountTabInitialized = false
 const codexGrantsLoading = ref(false)
@@ -353,6 +396,11 @@ const codexConnectionDescription = computed(() => (
 const codexVisible = computed(() => !!codexStatus.value?.enabled || codexStatusLoadFailed.value)
 const canManageCodexGrants = computed(() => !!codexStatus.value?.manage_grants)
 
+const usageLocale = computed(() => locale.value)
+const usageWindowDurationForLocale = (minutes: number | null) => usageWindowDuration(minutes, usageLocale.value)
+const usageResetAtForLocale = (seconds: number | null) => usageResetAt(seconds, usageLocale.value)
+const usageUpdatedAtForLocale = (value: string | undefined) => usageUpdatedAt(value, usageLocale.value)
+
 watch(grantMemberID, () => syncSelectedCodexGrantIDs())
 
 async function loadCodexModels() {
@@ -373,6 +421,24 @@ async function loadCodexModels() {
     codexModelsLoadFailed.value = true
   } finally {
     if (!unmounted) codexModelsLoading.value = false
+  }
+}
+
+async function loadCodexUsage() {
+  if (!codexStatus.value?.enabled || !codexStatus.value.connected) return
+  const request = ++codexUsageRequest
+  codexUsageLoading.value = true
+  codexUsageLoadFailed.value = false
+  try {
+    const next = await getCodexUsage()
+    if (unmounted || request !== codexUsageRequest) return
+    codexUsage.value = next
+  } catch {
+    if (unmounted || request !== codexUsageRequest) return
+    codexUsage.value = null
+    codexUsageLoadFailed.value = true
+  } finally {
+    if (!unmounted && request === codexUsageRequest) codexUsageLoading.value = false
   }
 }
 
@@ -452,8 +518,15 @@ async function loadCodex() {
     if (nextStatus.enabled && nextStatus.connected) {
       await loadCodexModels()
     }
-    else codexModels.value = []
+    else {
+      codexModels.value = []
+      codexUsageRequest++
+      codexUsage.value = null
+      codexUsageLoadFailed.value = false
+      codexUsageLoading.value = false
+    }
     if (nextStatus.enabled) await loadCodexGrants()
+    if (nextStatus.enabled && nextStatus.connected) void loadCodexUsage()
   } catch (error: any) {
     if (unmounted) return
     // A 404 means this is an older WeKnora server, so keep the optional entry
@@ -689,6 +762,25 @@ onUnmounted(() => { unmounted = true; stopPolling({ closePopup: true }) })
   background: color-mix(in srgb, var(--td-brand-color) 5%, var(--td-bg-color-container));
 }
 .chatgpt-settings__account-status-card .setting-info p { margin: 6px 0; }
+.chatgpt-settings__usage-card {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: 8px;
+  background: var(--td-bg-color-container);
+}
+.chatgpt-settings__usage-card-heading { display: flex; justify-content: space-between; gap: 16px; align-items: start; }
+.chatgpt-settings__usage-card-heading h3 { margin: 0 0 4px; font-size: 15px; }
+.chatgpt-settings__usage-card-heading p { margin: 0; color: var(--td-text-color-secondary); line-height: 1.5; }
+.chatgpt-settings__usage-unavailable { padding: 16px 0; }
+.chatgpt-settings__usage-limits { display: grid; gap: 14px; margin-top: 16px; }
+.chatgpt-settings__usage-updated { margin: 0; color: var(--td-text-color-secondary); font-size: 12px; }
+.chatgpt-settings__usage-window { padding-top: 12px; border-top: 1px solid var(--td-component-stroke); }
+.chatgpt-settings__usage-window-label, .chatgpt-settings__usage-window-meta { display: flex; justify-content: space-between; gap: 10px; }
+.chatgpt-settings__usage-window-label { margin-bottom: 8px; font-weight: 500; }
+.chatgpt-settings__usage-window-meta { margin-top: 7px; flex-wrap: wrap; color: var(--td-text-color-secondary); font-size: 12px; }
+.chatgpt-settings__usage-bar { height: 8px; overflow: hidden; border-radius: 999px; background: var(--td-bg-color-secondarycontainer); }
+.chatgpt-settings__usage-bar span { display: block; height: 100%; border-radius: inherit; background: var(--td-brand-color); transition: width .2s ease; }
 
 .chatgpt-settings__connection-actions,
 .chatgpt-settings__model-action {
