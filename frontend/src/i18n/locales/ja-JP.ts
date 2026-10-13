@@ -3453,6 +3453,7 @@ export default {
       rebuildSkip: '再構築は後からデータソース画面で手動で実行できます'
     },
     wikiBrowser: {
+      resumeGeneration: '生成を再開', resumeConfirm: '現在のアカウントで古いタスクを再開し、不足する Wiki コンテンツを生成します。文書の再解析や Embedding の変更は行いません。', resumeRecovered: '{count} 件の古いタスクを再開しました', resumeNothing: '再開できる古いタスクはありません', resumeFailed: '生成を再開できませんでした',
       editBtn: '編集',
       historyBtn: '履歴',
       historyTitle: '改訂履歴 · {title}',

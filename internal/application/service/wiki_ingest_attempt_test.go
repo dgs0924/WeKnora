@@ -60,48 +60,61 @@ func TestFinalizeWikiSubtaskSkipsSupersededAttempt(t *testing.T) {
 	}
 }
 
-// A synthesis model that exists but cannot be built fails identically on
-// every trigger and before any op is claimed, so no op ever spends its retry
-// budget. On the last delivery the KB's pending ingest ops are released
-// instead of holding their documents in "finalizing"; earlier deliveries
-// still retry.
-func TestWikiIngestReleasesOpsWhenModelUnusableOnFinalAttempt(t *testing.T) {
-	payload, err := json.Marshal(WikiIngestPayload{TenantID: 7, KnowledgeBaseID: "kb-1"})
-	require.NoError(t, err)
-	buildErr := errors.New("base URL rejected by SSRF guard")
-	tests := []struct {
-		name        string
-		retried     int
-		wantErr     bool
-		wantDrained bool
-	}{
-		{name: "final attempt", retried: 3, wantDrained: true},
-		{name: "retry remains", retried: 1, wantErr: true},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			pending := &wikiUnavailablePendingRepo{drainKeys: []string{"k-1"}}
+// Model failures consume only the selected actor cohort's retry budget.
+func TestWikiIngestModelFailureSettlesOnlySelectedActor(t *testing.T) {
+	for _, modelErr := range []error{ErrModelNotFound, errors.New("base URL rejected")} {
+		for _, exhausted := range []bool{false, true} {
+			pending := newWikiActorFailureRepo(t, 1)
+			if exhausted {
+				pending.incrCount = wikiMaxFailRetries + 1
+			}
+			knowledge := &flakyFinalizeRepo{}
 			svc := &wikiIngestService{
-				kbService: &wikiGuardKBService{kb: &types.KnowledgeBase{
-					ID: "kb-1", IndexingStrategy: types.IndexingStrategy{WikiEnabled: true},
-					WikiConfig: &types.WikiConfig{SynthesisModelID: "m-1"},
-				}},
-				modelService: &wikiUnavailableModelService{err: buildErr},
-				pendingRepo:  pending,
+				kbService:    &wikiGuardKBService{kb: &types.KnowledgeBase{ID: "kb-1", IndexingStrategy: types.IndexingStrategy{WikiEnabled: true}, WikiConfig: &types.WikiConfig{SynthesisModelID: "m-1"}}},
+				modelService: &wikiUnavailableModelService{err: modelErr}, pendingRepo: pending, knowledgeRepo: knowledge,
 			}
-			ctx := types.WithTaskRetryMetadata(context.Background(), test.retried, 3)
-
-			err := svc.ProcessWikiIngest(ctx, asynq.NewTask(types.TypeWikiIngest, payload))
-
-			if test.wantErr {
-				require.ErrorIs(t, err, buildErr)
-				assert.Empty(t, pending.drained)
-				return
+			payload, _ := json.Marshal(WikiIngestPayload{TenantID: 7, KnowledgeBaseID: "kb-1"})
+			err := svc.ProcessWikiIngest(context.Background(), asynq.NewTask(types.TypeWikiIngest, payload))
+			require.ErrorIs(t, err, modelErr)
+			require.Equal(t, []int64{1}, pending.incremented)
+			if exhausted {
+				require.Equal(t, []int64{1}, pending.deleted)
+				require.Equal(t, 1, knowledge.successes)
+			} else {
+				require.Empty(t, pending.deleted)
+				require.Equal(t, 0, knowledge.successes)
 			}
-			require.NoError(t, err)
-			assert.Equal(t, []string{wikiTaskType + "|" + wikiTaskScope + "|kb-1|" + WikiOpIngest}, pending.drained)
-		})
+		}
 	}
+}
+
+type wikiActorFailureRepo struct {
+	wikiPendingRepoForCleanupTest
+	rows                 []*types.TaskPendingOp
+	incremented, deleted []int64
+}
+
+func newWikiActorFailureRepo(t *testing.T, count int) *wikiActorFailureRepo {
+	t.Helper()
+	r := &wikiActorFailureRepo{}
+	r.incrCount = count
+	for i, user := range []string{"alice", "bob"} {
+		body, err := json.Marshal(WikiPendingOp{Op: WikiOpIngest, KnowledgeID: user, Initiator: types.TaskInitiator{UserID: user, Role: types.TenantRoleAdmin}})
+		require.NoError(t, err)
+		r.rows = append(r.rows, &types.TaskPendingOp{ID: int64(i + 1), DedupKey: user, Payload: body})
+	}
+	return r
+}
+func (r *wikiActorFailureRepo) PeekBatch(context.Context, string, string, string, int) ([]*types.TaskPendingOp, error) {
+	return r.rows, nil
+}
+func (r *wikiActorFailureRepo) IncrFailCount(_ context.Context, id int64) (int, error) {
+	r.incremented = append(r.incremented, id)
+	return r.incrCount, nil
+}
+func (r *wikiActorFailureRepo) DeleteByIDs(_ context.Context, ids []int64) error {
+	r.deleted = append(r.deleted, ids...)
+	return nil
 }
 
 type panickingKnowledgeService struct {

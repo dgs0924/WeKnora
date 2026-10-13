@@ -21,11 +21,12 @@ import (
 
 // WikiPageHandler handles HTTP requests for wiki page operations
 type WikiPageHandler struct {
-	wikiService   interfaces.WikiPageService
-	kbService     interfaces.KnowledgeBaseService
-	lintService   *service.WikiLintService
-	auditService  interfaces.AuditLogService
-	memoryService interfaces.MemoryService
+	wikiService     interfaces.WikiPageService
+	kbService       interfaces.KnowledgeBaseService
+	lintService     *service.WikiLintService
+	auditService    interfaces.AuditLogService
+	memoryService   interfaces.MemoryService
+	recoveryService *service.WikiRecoveryService
 }
 
 // NewWikiPageHandler creates a new wiki page handler
@@ -35,13 +36,15 @@ func NewWikiPageHandler(
 	lintService *service.WikiLintService,
 	auditService interfaces.AuditLogService,
 	memoryService interfaces.MemoryService,
+	recoveryService *service.WikiRecoveryService,
 ) *WikiPageHandler {
 	return &WikiPageHandler{
-		wikiService:   wikiService,
-		kbService:     kbService,
-		lintService:   lintService,
-		auditService:  auditService,
-		memoryService: memoryService,
+		wikiService:     wikiService,
+		kbService:       kbService,
+		lintService:     lintService,
+		auditService:    auditService,
+		memoryService:   memoryService,
+		recoveryService: recoveryService,
 	}
 }
 

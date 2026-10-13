@@ -69,14 +69,6 @@ func TestWikiIngestReleasesDocumentsWhenWikiUnavailable(t *testing.T) {
 	}{
 		{name: "wiki disabled", kb: &types.KnowledgeBase{ID: "kb-1"}},
 		{name: "no synthesis model", kb: &types.KnowledgeBase{ID: "kb-1", IndexingStrategy: enabled}},
-		{
-			name: "synthesis model deleted",
-			kb: &types.KnowledgeBase{
-				ID: "kb-1", IndexingStrategy: enabled,
-				WikiConfig: &types.WikiConfig{SynthesisModelID: "gone"},
-			},
-			modelErr: ErrModelNotFound,
-		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -114,7 +106,7 @@ func TestWikiIngestRetriesWhenReleaseFails(t *testing.T) {
 func TestWikiIngestKeepsOpsOnTransientModelError(t *testing.T) {
 	payload, err := json.Marshal(WikiIngestPayload{TenantID: 7, KnowledgeBaseID: "kb-1"})
 	require.NoError(t, err)
-	pending := &wikiUnavailablePendingRepo{}
+	pending := newWikiActorFailureRepo(t, 1)
 	transient := errors.New("connection reset")
 	svc := &wikiIngestService{
 		kbService: &wikiGuardKBService{kb: &types.KnowledgeBase{
@@ -128,7 +120,8 @@ func TestWikiIngestKeepsOpsOnTransientModelError(t *testing.T) {
 	err = svc.ProcessWikiIngest(context.Background(), asynq.NewTask(types.TypeWikiIngest, payload))
 
 	require.ErrorIs(t, err, transient)
-	assert.Empty(t, pending.drained)
+	assert.Empty(t, pending.deleted)
+	assert.Equal(t, []int64{1}, pending.incremented)
 }
 
 type abortCheckRepo struct {

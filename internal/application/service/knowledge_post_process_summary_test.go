@@ -126,6 +126,7 @@ func TestKnowledgePostProcessOptionalSummary(t *testing.T) {
 }
 
 func TestKnowledgePostProcessPreservesInitiatorForModelSubtasks(t *testing.T) {
+	t.Setenv("NEO4J_ENABLE", "true")
 	knowledge := &types.Knowledge{
 		ID: "doc", TenantID: 7, KnowledgeBaseID: "kb", ParseStatus: types.ParseStatusProcessing,
 	}

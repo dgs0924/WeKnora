@@ -297,6 +297,7 @@ type wikiFinalizeRow struct {
 	Title     string              `json:"title,omitempty"`
 	Change    *wikiFinalizeChange `json:"change,omitempty"`
 	FolderIDs []string            `json:"folder_ids,omitempty"`
+	Initiator types.TaskInitiator `json:"initiator,omitempty"`
 }
 
 // WikiDeletedTombstoneKey returns the Redis key used to mark a knowledge as
@@ -358,6 +359,9 @@ type WikiPendingOp struct {
 	// slot. An op that outlived a reparse must not release a slot of the
 	// newer attempt. Zero on ops queued before this field existed.
 	Attempt int `json:"attempt,omitempty"`
+	// Initiator is persisted per document, never on the debounced KB task:
+	// one batch can contain uploads by different people.
+	Initiator types.TaskInitiator `json:"initiator,omitempty"`
 	// Retract fields
 	DocTitle   string   `json:"doc_title,omitempty"`
 	DocSummary string   `json:"doc_summary,omitempty"`
@@ -592,6 +596,7 @@ func newWikiIngestPendingOp(
 		KnowledgeID: knowledgeID,
 		Language:    lang,
 		Attempt:     attemptFromCtx(ctx),
+		Initiator:   types.TaskInitiatorFromContext(ctx),
 	}
 	payloadBytes, err := json.Marshal(op)
 	if err != nil {
@@ -670,6 +675,7 @@ func enqueueWikiRetract(
 		PageSlugs:   payload.PageSlugs,
 		FolderIDs:   payload.FolderIDs,
 		Language:    payload.Language,
+		Initiator:   types.TaskInitiatorFromContext(ctx),
 	}
 	payloadBytes, err := json.Marshal(op)
 	if err != nil {
@@ -818,7 +824,7 @@ func (s *wikiIngestService) enqueueFinalize(
 	}
 	acceptedAny := false
 	for _, slug := range affectedSlugs {
-		row := wikiFinalizeRow{Slug: slug, Title: freshTitleBySlug[slug]}
+		row := wikiFinalizeRow{Slug: slug, Title: freshTitleBySlug[slug], Initiator: types.TaskInitiatorFromContext(ctx)}
 		b, err := json.Marshal(row)
 		if err != nil {
 			continue
@@ -836,7 +842,7 @@ func (s *wikiIngestService) enqueueFinalize(
 		}
 	}
 	for i := range changes {
-		row := wikiFinalizeRow{Change: &changes[i]}
+		row := wikiFinalizeRow{Change: &changes[i], Initiator: types.TaskInitiatorFromContext(ctx)}
 		b, err := json.Marshal(row)
 		if err != nil {
 			continue
@@ -854,7 +860,7 @@ func (s *wikiIngestService) enqueueFinalize(
 		}
 	}
 	if len(folderIDs) > 0 {
-		row := wikiFinalizeRow{FolderIDs: uniqueWikiFolderIDs(folderIDs)}
+		row := wikiFinalizeRow{FolderIDs: uniqueWikiFolderIDs(folderIDs), Initiator: types.TaskInitiatorFromContext(ctx)}
 		if b, err := json.Marshal(row); err == nil {
 			if s.enqueueFinalizeRow(ctx, &types.TaskPendingOp{
 				TenantID: payload.TenantID,
@@ -961,7 +967,7 @@ func (s *wikiIngestService) peekPendingList(ctx context.Context, kbID string, li
 		// as a false success and strand the pending list.
 		return nil, nil, err
 	}
-	ops, peekedIDs = s.decodePendingRows(ctx, rows)
+	ops, peekedIDs, _ = s.decodePendingRowsForInitiator(ctx, rows)
 	return ops, peekedIDs, nil
 }
 
@@ -988,7 +994,13 @@ func (s *wikiIngestService) claimPendingList(ctx context.Context, kbID string, l
 		// as a false "no pending ops" success and stranding the queue.
 		return nil, nil, err
 	}
-	ops, peekedIDs = s.decodePendingRows(ctx, rows)
+	var releaseIDs []int64
+	ops, peekedIDs, releaseIDs = s.decodePendingRowsForInitiator(ctx, rows)
+	if len(releaseIDs) > 0 {
+		if err := s.pendingRepo.ReleaseByIDs(ctx, releaseIDs); err != nil {
+			return nil, nil, fmt.Errorf("release cross-initiator wiki claims: %w", err)
+		}
+	}
 	return ops, peekedIDs, nil
 }
 
@@ -1268,6 +1280,78 @@ func (s *wikiIngestService) decodePendingRows(ctx context.Context, rows []*types
 		ops = append(ops, reversedUnique[i])
 	}
 	return ops, peekedIDs
+}
+
+// decodePendingRowsForInitiator keeps a batch homogeneous by the trusted
+// initiating user. KB triggers are intentionally actorless and may contain
+// uploads by many users; resolving one personal-plan model for that mixed
+// batch would otherwise silently charge/use the wrong account. Rows for other
+// users are left durable (and, in Redis mode, released by claimPendingList).
+// Earlier rows for a selected document are retained in selectedIDs so the
+// existing last-write-wins semantics remain intact.
+func (s *wikiIngestService) decodePendingRowsForInitiator(ctx context.Context, rows []*types.TaskPendingOp) (ops []WikiPendingOp, selectedIDs, releaseIDs []int64) {
+	if len(rows) == 0 {
+		return nil, nil, nil
+	}
+	// Prefer a real human actor when a legacy actorless row shares the peek
+	// window, so old rows wait for explicit recovery instead of starving new
+	// authorized uploads behind them. If every row is legacy, retain the empty
+	// actor and let normal authorization reject it without inventing identity.
+	var first WikiPendingOp
+	_ = json.Unmarshal(rows[0].Payload, &first)
+	initiator := first.Initiator
+	for _, row := range rows {
+		var candidate WikiPendingOp
+		_ = json.Unmarshal(row.Payload, &candidate)
+		if candidate.Initiator.UserID != "" {
+			initiator = candidate.Initiator
+			break
+		}
+	}
+	actor := wikiInitiatorKey(initiator)
+	selectedRows := make([]*types.TaskPendingOp, 0, len(rows))
+	for _, row := range rows {
+		var op WikiPendingOp
+		_ = json.Unmarshal(row.Payload, &op)
+		// Do not let last-write-wins dedup cross identities: a newer operation
+		// from Bob must not cause Alice's durable row to be trimmed under Bob's
+		// authority. It remains for its own actor cohort (or explicit recovery).
+		if wikiInitiatorKey(op.Initiator) == actor {
+			selectedIDs = append(selectedIDs, row.ID)
+			selectedRows = append(selectedRows, row)
+		} else {
+			releaseIDs = append(releaseIDs, row.ID)
+		}
+	}
+	// Last-write-wins is deliberately applied only AFTER actor partitioning.
+	// Otherwise Bob's newest row for a document could erase Alice's older row.
+	ops, _ = s.decodePendingRows(ctx, selectedRows)
+	return ops, selectedIDs, releaseIDs
+}
+
+func wikiInitiatorKey(initiator types.TaskInitiator) string {
+	// Keep web and API-key initiated work in separate cohorts even when a
+	// gateway attaches the same user id. Role is included because it is part of
+	// the persisted trusted snapshot restored into worker context.
+	return fmt.Sprintf("%s|%s|%d|%s", initiator.UserID, initiator.Role, initiator.APIKeyID, initiator.APIKeyName)
+}
+
+type wikiPrincipalClearedContext struct{ context.Context }
+
+func (c wikiPrincipalClearedContext) Value(key any) any {
+	switch key {
+	case types.UserIDContextKey, types.TenantRoleContextKey, types.TenantAPIKeyScopeContextKey, types.AuditAPIKeyContextKey:
+		return nil
+	default:
+		return c.Context.Value(key)
+	}
+}
+
+// withWikiInitiator first masks any caller identity that may have survived a
+// scheduler/test context, then restores only the persisted task actor. Empty
+// legacy actors therefore stay actorless instead of inheriting an admin.
+func withWikiInitiator(ctx context.Context, initiator types.TaskInitiator) context.Context {
+	return initiator.Apply(wikiPrincipalClearedContext{Context: ctx})
 }
 
 // trimPendingList deletes consumed rows from task_pending_ops. Empty
@@ -2763,7 +2847,7 @@ func (s *wikiIngestService) generateWithTemplateResult(
 	}{Messages: messages, Options: opts})
 	requestKey := chat.BuildPromptCacheKey(
 		tenantID, chatModel.GetModelID(), "wiki_exact_request",
-		chat.FingerprintPromptPrefix(string(requestJSON)),
+		wikiInitiatorKey(types.TaskInitiatorFromContext(ctx))+":"+chat.FingerprintPromptPrefix(string(requestJSON)),
 	)
 
 	execute := func() (interface{}, error) {

@@ -67,6 +67,10 @@
             })
             }}</span>
           </div>
+          <t-popconfirm v-if="props.canEdit"
+            :content="$t('knowledgeEditor.wikiBrowser.resumeConfirm')" @confirm="resumeWikiGenerationTasks">
+            <t-button size="small" variant="outline" :loading="resumingWiki">{{ $t('knowledgeEditor.wikiBrowser.resumeGeneration') }}</t-button>
+          </t-popconfirm>
         </div>
 
         <!-- Legend Overlay -->
@@ -199,7 +203,13 @@
             <span class="queue-text">{{ $t('knowledgeEditor.wikiBrowser.queueStatus', {
               count: stats.pending_tasks || 0
             }) }}</span>
+
           </div>
+            <t-popconfirm v-if="props.canEdit"
+              :content="$t('knowledgeEditor.wikiBrowser.resumeConfirm')"
+              @confirm="resumeWikiGenerationTasks">
+              <t-button size="small" variant="outline" :loading="resumingWiki">{{ $t('knowledgeEditor.wikiBrowser.resumeGeneration') }}</t-button>
+            </t-popconfirm>
           <!-- Global Issues -->
           <div v-if="stats && stats.pending_issues > 0" class="wiki-global-issues-status"
             @click="showGlobalIssuesDrawer = true">
@@ -856,6 +866,7 @@ import {
   getWikiIndex,
   getWikiGraph,
   getWikiStats,
+  resumeWikiGeneration,
   searchWikiPages,
   listWikiIssues,
   updateWikiIssueStatus,
@@ -876,6 +887,22 @@ const settingsStore = useSettingsStore()
 ensureLiteralSingleTildeOnGlobalMarked()
 
 const { t } = useI18n()
+const resumingWiki = ref(false)
+
+async function resumeWikiGenerationTasks() {
+  if (resumingWiki.value) return
+  resumingWiki.value = true
+  try {
+    const response: any = await resumeWikiGeneration(props.knowledgeBaseId)
+    if (response?.success === false) throw new Error(response?.message || t('knowledgeEditor.wikiBrowser.resumeFailed'))
+    const result = response?.data || response || {}
+    if ((result.recovered_count || 0) > 0) MessagePlugin.success(t('knowledgeEditor.wikiBrowser.resumeRecovered', { count: result.recovered_count }))
+    else MessagePlugin.info(t('knowledgeEditor.wikiBrowser.resumeNothing'))
+    await Promise.all([loadStats(), loadPages(), loadGraph()])
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || t('knowledgeEditor.wikiBrowser.resumeFailed'))
+  } finally { resumingWiki.value = false }
+}
 
 const props = defineProps<{
   knowledgeBaseId: string

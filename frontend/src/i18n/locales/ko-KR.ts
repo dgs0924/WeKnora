@@ -4498,6 +4498,7 @@ export default {
       followUpDesc: '왼쪽에서 데이터 소스를 구성하거나 "공유 관리"에서 스페이스에 게시할 수 있습니다',
     },
     wikiBrowser: {
+      resumeGeneration: '생성 재개', resumeConfirm: '현재 계정으로 이전 작업을 재개하고 누락된 Wiki 콘텐츠를 생성합니다. 문서 재분석이나 Embedding 변경은 하지 않습니다.', resumeRecovered: '이전 작업 {count}개를 재개했습니다', resumeNothing: '재개할 이전 작업이 없습니다', resumeFailed: '생성을 재개하지 못했습니다',
       editBtn: '편집',
       historyBtn: '기록',
       historyTitle: '버전 기록 · {title}',

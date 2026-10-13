@@ -396,26 +396,6 @@ func (s *wikiIngestService) ProcessWikiIngest(ctx context.Context, t *asynq.Task
 		exitStatus = "missing_synthesis_model"
 		return s.releaseIngestForUnavailableWiki(ctx, kb.ID, "no synthesis model configured")
 	}
-	chatModel, err := s.modelService.GetChatModel(ctx, synthesisModelID)
-	if errors.Is(err, ErrModelNotFound) {
-		exitStatus = "synthesis_model_not_found"
-		return s.releaseIngestForUnavailableWiki(ctx, kb.ID, "synthesis model "+synthesisModelID+" not found")
-	}
-	if err != nil {
-		exitStatus = "get_chat_model_failed"
-		if isFinalAsynqAttempt(ctx) {
-			// The model row exists but cannot be built (a base URL the SSRF
-			// guard rejects, an unknown provider, ...). That fails the same
-			// way on every trigger and before any op is claimed, so no op
-			// ever spends its fail_count budget: without this the KB's
-			// documents stayed in "finalizing" forever while housekeeping
-			// kept re-arming the trigger.
-			return s.releaseIngestForUnavailableWiki(ctx, kb.ID,
-				"synthesis model "+synthesisModelID+" unusable: "+err.Error())
-		}
-		return fmt.Errorf("wiki ingest: get chat model: %w", err)
-	}
-
 	// Resolve per-KB tunables once. WikiConfig.IngestBatchSize /
 	// IngestMapParallel / IngestReduceParallel let operators on
 	// 4w-document KBs raise the throughput knob (more docs per batch +
@@ -479,6 +459,44 @@ func (s *wikiIngestService) ProcessWikiIngest(ctx context.Context, t *asynq.Task
 		followUpScheduled = s.scheduleStaleClaimRecheck(ctx, payload)
 		return nil
 	}
+	// Install cleanup immediately after claiming, before actor/model checks.
+	// An authorization failure must not hold a row for wikiClaimStaleAfter.
+	claimsSettled := false
+	if s.redisClient != nil && len(peekedIDs) > 0 {
+		defer func() {
+			if claimsSettled {
+				return
+			}
+			releaseCtx, releaseCancel := wikiIngestCleanupContext(ctx)
+			defer releaseCancel()
+			if err := s.pendingRepo.ReleaseByIDs(releaseCtx, peekedIDs); err != nil {
+				logger.Warnf(ctx, "wiki ingest: failed to release %d claims on abnormal exit for KB %s: %v", len(peekedIDs), payload.KnowledgeBaseID, err)
+			}
+		}()
+	}
+	// The trigger has no identity by design. Every selected document belongs
+	// to exactly one persisted initiator (claimPendingList partitions mixed
+	// rows); restore that identity before resolving *any* personal model.
+	batchInitiator := pendingOps[0].Initiator
+	for _, op := range pendingOps[1:] {
+		if wikiInitiatorKey(op.Initiator) != wikiInitiatorKey(batchInitiator) {
+			return fmt.Errorf("wiki ingest: mixed initiators escaped batch partition")
+		}
+	}
+	ctx = withWikiInitiator(ctx, batchInitiator)
+	chatModel, err := s.modelService.GetChatModel(ctx, synthesisModelID)
+	if errors.Is(err, ErrModelNotFound) {
+		exitStatus = "synthesis_model_not_found"
+		// This can mean the selected actor has no access to a personal model.
+		// Never drain the entire KB here: rows for another actor may be valid.
+		_ = s.requeueFailedOps(ctx, payload, pendingOps)
+		return fmt.Errorf("wiki ingest: synthesis model unavailable to initiator: %w", err)
+	}
+	if err != nil {
+		exitStatus = "get_chat_model_failed"
+		_ = s.requeueFailedOps(ctx, payload, pendingOps)
+		return fmt.Errorf("wiki ingest: get chat model: %w", err)
+	}
 
 	logger.Infof(ctx, "wiki ingest: batch processing %d ops for KB %s", len(pendingOps), payload.KnowledgeBaseID)
 	// The parse attempt each document's op was queued under, for the slot
@@ -499,22 +517,6 @@ func (s *wikiIngestService) ProcessWikiIngest(ctx context.Context, t *asynq.Task
 	// bounded detached cleanup context because ctx may already be cancelled on
 	// the timeout path. Lite mode peeks without claiming, so there is nothing
 	// to release.
-	claimsSettled := false
-	if s.redisClient != nil && len(peekedIDs) > 0 {
-		defer func() {
-			if claimsSettled {
-				return
-			}
-			releaseCtx, releaseCancel := wikiIngestCleanupContext(ctx)
-			defer releaseCancel()
-			if err := s.pendingRepo.ReleaseByIDs(releaseCtx, peekedIDs); err != nil {
-				logger.Warnf(ctx, "wiki ingest: failed to release %d claims on abnormal exit for KB %s: %v", len(peekedIDs), payload.KnowledgeBaseID, err)
-				return
-			}
-			logger.Warnf(ctx, "wiki ingest: released %d claimed rows on abnormal exit for KB %s (re-claimable immediately)", len(peekedIDs), payload.KnowledgeBaseID)
-		}()
-	}
-
 	// Resolve extraction granularity once per batch. Historical rows with
 	// empty/unknown values fall back to Standard via Normalize(). Failures
 	// to load the KB (unlikely since we're already acting on it) also
@@ -1121,6 +1123,15 @@ func (s *wikiIngestService) ProcessWikiFinalize(ctx context.Context, t *asynq.Ta
 	if len(rows) == 0 {
 		return nil
 	}
+	// Finalize is also KB-debounced, so its durable rows may belong to several
+	// users. Consume only one trusted identity per run; the remaining rows stay
+	// queued and are re-scheduled below. This prevents a coalesced task from
+	// resolving a personal model under an unrelated document's identity.
+	rows, finalizeInitiator := selectWikiFinalizeRowsByInitiator(rows)
+	if len(rows) == 0 {
+		return nil
+	}
+	ctx = withWikiInitiator(ctx, finalizeInitiator)
 
 	kb, err := s.kbService.GetKnowledgeBaseByIDOnly(ctx, payload.KnowledgeBaseID)
 	if errors.Is(err, apprepo.ErrKnowledgeBaseNotFound) || (err == nil && kb == nil) {
@@ -1294,6 +1305,31 @@ func (s *wikiIngestService) ProcessWikiFinalize(ctx context.Context, t *asynq.Ta
 		time.Since(startedAt).Round(time.Millisecond),
 	)
 	return nil
+}
+
+func selectWikiFinalizeRowsByInitiator(rows []*types.TaskPendingOp) ([]*types.TaskPendingOp, types.TaskInitiator) {
+	if len(rows) == 0 {
+		return nil, types.TaskInitiator{}
+	}
+	var first wikiFinalizeRow
+	_ = json.Unmarshal(rows[0].Payload, &first)
+	key := wikiInitiatorKey(first.Initiator)
+	selected := make([]*types.TaskPendingOp, 0, len(rows))
+	for _, row := range rows {
+		var decoded wikiFinalizeRow
+		if err := json.Unmarshal(row.Payload, &decoded); err != nil {
+			// Keep malformed rows with the selected group so the existing
+			// consumer path can log and drain them instead of retrying forever.
+			if key == wikiInitiatorKey(types.TaskInitiator{}) {
+				selected = append(selected, row)
+			}
+			continue
+		}
+		if wikiInitiatorKey(decoded.Initiator) == key {
+			selected = append(selected, row)
+		}
+	}
+	return selected, first.Initiator
 }
 
 // mapOneDocumentRecovered runs mapOneDocument and turns a panic into a map

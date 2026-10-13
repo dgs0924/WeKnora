@@ -86,6 +86,12 @@ type TaskPendingOpsRepository interface {
 	DeleteByDedupKey(ctx context.Context, taskType, scope, scopeID, dedupKey, op string) error
 }
 
+// TaskPendingOpsWikiRecovery is deliberately optional so only the durable
+// GORM repository exposes the privileged legacy-actor recovery operation.
+type TaskPendingOpsWikiRecovery interface {
+	RecoverLegacyWikiOps(ctx context.Context, tenantID uint64, kbID string, initiator types.TaskInitiator) (recovered, skipped int, err error)
+}
+
 // TaskPendingOpsClaimableCounter counts the distinct keys ClaimBatch can
 // claim, excluding every key with a fresh claim (including late siblings).
 // PendingCount remains the count of all rows for crash-recovery consumers.

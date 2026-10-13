@@ -4506,6 +4506,7 @@ export default {
       followUpDesc: '可在左側設定資料源，或在「共享管理」中發布到空間',
     },
     wikiBrowser: {
+      resumeGeneration: '恢復生成', resumeConfirm: '以目前登入帳號恢復舊任務並補產生缺少的 Wiki 內容，不重新解析文件或更換 Embedding。', resumeRecovered: '已恢復 {count} 個舊任務', resumeNothing: '沒有可恢復的舊任務', resumeFailed: '恢復生成失敗',
       editBtn: '編輯',
       historyBtn: '歷史',
       historyTitle: '版本歷史 · {title}',

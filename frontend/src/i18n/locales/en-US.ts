@@ -3464,6 +3464,7 @@ export default {
       rebuildSkip: 'You can manually trigger a rebuild later from Data Sources'
     },
     wikiBrowser: {
+      resumeGeneration: 'Resume generation', resumeConfirm: 'Resume old tasks and generate missing Wiki content as the current user with authorized models. Documents will not be reparsed and embeddings will not change.', resumeRecovered: 'Resumed {count} old tasks', resumeNothing: 'No old tasks can be resumed', resumeFailed: 'Could not resume generation',
       editBtn: 'Edit',
       historyBtn: 'History',
       historyTitle: 'Revision history · {title}',
