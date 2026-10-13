@@ -21,5 +21,11 @@ func validateASRBaseURL(baseURL string) error {
 func newASRHTTPClient(timeout time.Duration) *http.Client {
 	cfg := secutils.DefaultSSRFSafeHTTPClientConfig()
 	cfg.Timeout = timeout
-	return secutils.NewSSRFSafeHTTPClient(cfg)
+	return secutils.NewSSRFSafeHTTPClientWithTransport(cfg, sharedASRHTTPTransport)
 }
+
+var sharedASRHTTPTransport = func() *http.Transport {
+	transport := secutils.NewSSRFSafeTransport(secutils.DefaultSSRFSafeHTTPClientConfig())
+	transport.Proxy = http.ProxyFromEnvironment
+	return transport
+}()
