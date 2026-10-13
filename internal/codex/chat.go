@@ -76,11 +76,12 @@ func (c *modelChat) ChatStream(ctx context.Context, ms []chat.Message, o *chat.C
 	if e != nil {
 		return nil, e
 	}
-	callCtx, cancel := context.WithTimeout(ctx, c.r.cfg.Timeout)
-	if e = c.r.acquire(callCtx); e != nil {
-		cancel()
+	// Queue waiting is bounded by the caller, not the model execution budget.
+	// Wiki fans out several requests against the same account gate.
+	if e = c.r.acquire(ctx); e != nil {
 		return nil, e
 	}
+	callCtx, cancel := context.WithTimeout(ctx, c.r.cfg.Timeout)
 	if c.authorize != nil {
 		if e = c.authorize(callCtx); e != nil {
 			c.r.release()
@@ -462,5 +463,13 @@ func send(ctx context.Context, out chan<- types.StreamResponse, v types.StreamRe
 	}
 }
 func emitError(ctx context.Context, out chan<- types.StreamResponse, e error) {
-	_ = send(ctx, out, types.StreamResponse{ResponseType: types.ResponseTypeError, Content: sanitize(e.Error()), Done: true, FinishReason: types.FinishReasonIncomplete})
+	response := types.StreamResponse{ResponseType: types.ResponseTypeError, Content: sanitize(e.Error()), Done: true, FinishReason: types.FinishReasonIncomplete}
+	// Preserve a timeout diagnostic even when the call context just expired.
+	// Never block an abandoned consumer whose buffer is already full.
+	select {
+	case out <- response:
+		return
+	default:
+	}
+	_ = send(ctx, out, response)
 }

@@ -171,3 +171,12 @@ func TestCodexVisionModelIDIsIndependentFromLegacyChatID(t *testing.T) {
 	require.NotEqual(t, chatID, visionID)
 	require.Equal(t, chatID, codexModelID(7, "owner", "gpt-test", types.ModelTypeKnowledgeQA))
 }
+
+func TestCodexEnvironmentRejectsInvalidConcurrency(t *testing.T) {
+	t.Setenv("WEKNORA_CODEX_OWNER_USER_ID", "owner")
+	for _, value := range []string{"0", "9", "invalid"} {
+		t.Setenv("WEKNORA_CODEX_MAX_CONCURRENT", value)
+		_, err := NewCodexConnectionFromEnvironment()
+		require.ErrorContains(t, err, "WEKNORA_CODEX_MAX_CONCURRENT")
+	}
+}

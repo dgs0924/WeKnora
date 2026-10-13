@@ -54,12 +54,21 @@ func NewCodexConnectionFromEnvironment() (*CodexConnection, error) {
 		}
 		maxOutput = value
 	}
+	maxConcurrent := 1
+	if raw := strings.TrimSpace(os.Getenv("WEKNORA_CODEX_MAX_CONCURRENT")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 || value > 8 {
+			return nil, fmt.Errorf("invalid WEKNORA_CODEX_MAX_CONCURRENT")
+		}
+		maxConcurrent = value
+	}
 	runtime, err := codex.New(codex.Config{
 		Binary:         strings.TrimSpace(os.Getenv("WEKNORA_CODEX_BINARY")),
 		Home:           strings.TrimSpace(os.Getenv("WEKNORA_CODEX_HOME")),
 		WorkDir:        strings.TrimSpace(os.Getenv("WEKNORA_CODEX_WORKDIR")),
 		Timeout:        timeout,
 		MaxOutputBytes: maxOutput,
+		MaxConcurrent:  maxConcurrent,
 	})
 	if err != nil {
 		return &CodexConnection{Owner: owner, Err: err}, nil

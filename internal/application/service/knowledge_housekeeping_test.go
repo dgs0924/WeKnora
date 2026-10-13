@@ -746,3 +746,21 @@ func TestHousekeeping_KeepsOpenSpansOnInFlightRow(t *testing.T) {
 		"kid-processing").Row().Scan(&status))
 	assert.Equal(t, types.SpanStatusRunning, status)
 }
+
+func TestHousekeepingKeepsLiveWikiRecoverySpans(t *testing.T) {
+	db := setupHousekeepingDB(t)
+	svc := newHousekeepingSvcForTest(db)
+	now := time.Now()
+	insertKnowledge(t, db, "wiki-backfill", types.ParseStatusCompleted, now)
+	require.NoError(t, db.Exec("UPDATE knowledges SET knowledge_base_id = 'kb' WHERE id = 'wiki-backfill'").Error)
+	insertWikiPendingOp(t, db, "kb", "wiki-backfill")
+	require.NoError(t, db.Exec(`INSERT INTO knowledge_processing_spans (knowledge_id,attempt,span_id,name,kind,status,started_at) VALUES ('wiki-backfill',1,'wiki','postprocess.wiki.extract','subspan','running',?)`, now).Error)
+	svc.reapTerminalSpans(context.Background())
+	var status string
+	require.NoError(t, db.Table("knowledge_processing_spans").Select("status").Scan(&status).Error)
+	require.Equal(t, types.SpanStatusRunning, status)
+	require.NoError(t, db.Exec("DELETE FROM task_pending_ops").Error)
+	svc.reapTerminalSpans(context.Background())
+	require.NoError(t, db.Table("knowledge_processing_spans").Select("status").Scan(&status).Error)
+	require.Equal(t, types.SpanStatusCancelled, status)
+}

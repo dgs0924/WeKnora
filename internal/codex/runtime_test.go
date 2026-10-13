@@ -487,3 +487,36 @@ func writeRPC(out *bufio.Writer, v any) {
 	_, _ = out.Write(append(b, '\n'))
 	_ = out.Flush()
 }
+
+func TestChatQueueWaitDoesNotConsumeExecutionTimeout(t *testing.T) {
+	r := testRuntime(t, "stream")
+	r.cfg.Timeout = 5 * time.Second
+	if err := r.acquire(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	result := make(chan error, 1)
+	go func() {
+		_, err := r.Chat("gpt-test", "id").Chat(context.Background(), []chat.Message{{Role: "user", Content: "hello"}}, nil)
+		result <- err
+	}()
+	time.Sleep(5100 * time.Millisecond)
+	r.release()
+	if err := <-result; err != nil {
+		t.Fatalf("queue wait exhausted execution budget: %v", err)
+	}
+}
+
+func TestEmitErrorPreservesExpiredContextDiagnostic(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	out := make(chan types.StreamResponse, 1)
+	emitError(ctx, out, context.DeadlineExceeded)
+	select {
+	case response := <-out:
+		if response.ResponseType != types.ResponseTypeError {
+			t.Fatal(response)
+		}
+	default:
+		t.Fatal("timeout diagnostic was lost")
+	}
+}

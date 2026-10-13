@@ -863,6 +863,13 @@ func (h *HousekeepingService) reapTerminalSpans(ctx context.Context) {
 		Joins("JOIN knowledges k ON k.id = s.knowledge_id").
 		Where("s.status IN ?", openSpanStatuses).
 		Where("k.parse_status IN ?", terminalParseStatuses).
+		// Recovery reuses completed document chunks without reopening parsing.
+		// Its live Wiki operation still owns these spans until it settles.
+		Where(`NOT (k.parse_status = ? AND s.name LIKE ? AND EXISTS (
+            SELECT 1 FROM task_pending_ops p WHERE p.tenant_id = k.tenant_id
+            AND p.task_type = 'wiki:ingest' AND p.scope = 'knowledge_base'
+            AND p.scope_id = k.knowledge_base_id AND p.op = 'ingest' AND p.dedup_key = k.id
+        ))`, types.ParseStatusCompleted, "postprocess.wiki%").
 		Find(&rows).Error; err != nil {
 		logger.Warnf(ctx, "[Housekeeping] terminal span scan failed: %v", err)
 		return
