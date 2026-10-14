@@ -247,6 +247,7 @@
               <t-button variant="outline" @click="loadCodexGrants">{{ t('common.refresh') }}</t-button>
             </t-alert>
             <template v-else>
+              <div class="chatgpt-settings__grant-toolbar">
               <t-select
                 v-model="grantMemberID"
                 :label="t('codexSettings.grantMember')"
@@ -256,6 +257,12 @@
               >
                 <t-option v-for="user in grantUsers" :key="user.id" :value="user.id" :label="grantUserLabel(user)" />
               </t-select>
+              <div class="chatgpt-settings__grant-actions">
+                <t-button theme="primary" :disabled="!grantMemberID || savingCodexGrants" :loading="savingCodexGrants" @click="saveCodexGrants">
+                  {{ t('codexSettings.grantsSave') }}
+                </t-button>
+              </div>
+              </div>
               <t-empty v-if="grantUsers.length === 0" :description="t('codexSettings.grantsMembersEmpty')" />
               <div v-else-if="!grantMemberID" class="chatgpt-settings__grant-placeholder">
                 {{ t('codexSettings.grantMemberPlaceholder') }}
@@ -278,11 +285,7 @@
                   </div>
                 </section>
               </div>
-              <div class="chatgpt-settings__grant-actions">
-                <t-button theme="primary" :disabled="!grantMemberID || savingCodexGrants" :loading="savingCodexGrants" @click="saveCodexGrants">
-                  {{ t('codexSettings.grantsSave') }}
-                </t-button>
-              </div>
+
             </template>
           </section>
 
@@ -871,7 +874,14 @@ onUnmounted(() => { unmounted = true; stopPolling({ closePopup: true }) })
 }
 .chatgpt-settings__grant-warning { margin: 0 0 20px; }
 .chatgpt-settings__capability { margin: 12px 0 0; }
-.chatgpt-settings__grant-member { width: min(100%, 440px); margin-bottom: 20px; }
+.chatgpt-settings__grant-member { flex: 1; min-width: 0; max-width: 440px; }
+.chatgpt-settings__grant-toolbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  position: sticky; top: 0; z-index: 3;
+  padding: 12px 0; margin-bottom: 16px;
+  background: var(--td-bg-color-container);
+  border-bottom: 1px solid var(--td-component-stroke);
+}
 .chatgpt-settings__grant-placeholder { color: var(--td-text-color-secondary); padding: 16px 0; }
 .chatgpt-settings__grant-group h5 {
   display: flex; align-items: center; gap: 8px;
@@ -894,13 +904,7 @@ onUnmounted(() => { unmounted = true; stopPolling({ closePopup: true }) })
   .t-checkbox { flex-shrink: 0; }
 }
 .chatgpt-settings__grant-model { min-width: 0; }
-.chatgpt-settings__grant-actions {
-  display: flex; justify-content: flex-end;
-  position: sticky; bottom: 0; z-index: 2;
-  margin-top: 20px; padding: 14px 0;
-  border-top: 1px solid var(--td-component-stroke);
-  background: var(--td-bg-color-container);
-}
+.chatgpt-settings__grant-actions { display: flex; flex-shrink: 0; }
 @media (max-width: 860px) {
   .chatgpt-settings__overview { grid-template-columns: minmax(0, 1fr); }
 }
