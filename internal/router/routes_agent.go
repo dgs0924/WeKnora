@@ -40,6 +40,10 @@ func RegisterCustomAgentRoutes(r *gin.RouterGroup, agentHandler *handler.CustomA
 		agentsRead.GET("", g.Viewer(), agentHandler.ListAgents)
 		// Get agent by ID — Viewer+
 		agentsRead.GET("/:id", g.Viewer(), agentHandler.GetAgent)
+		// Personal model selections are browser-user state; API keys cannot
+		// create a preference that spends another user's model entitlement.
+		agents.GET("/:id/model-preference", g.Viewer(), agentHandler.GetModelPreference)
+		agents.PUT("/:id/model-preference", g.Viewer(), agentHandler.PutModelPreference)
 		// Update agent — creator OR Admin+
 		agentsWrite.PUT("/:id", g.OwnedAgentOrAdmin(), agentHandler.UpdateAgent)
 		// Delete agent — creator OR Admin+

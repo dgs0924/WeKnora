@@ -1344,6 +1344,12 @@ export default {
   },
   agentEditor: {
     builtinHint: '这是内置智能体，名称和描述不可修改，但可以调整配置参数',
+    personalModel: {
+      title: '个人对话模型', desc: '仅用于你发起的对话，不会修改空间共享的智能体配置。',
+      inherited: '继承空间默认', placeholder: '继承空间默认模型', restore: '恢复空间默认', save: '保存个人模型',
+      unavailable: '此模型已不可用或你已不再获授权。请选择当前可用模型，或恢复空间默认。',
+      saved: '个人模型已保存', loadFailed: '无法读取个人模型设置', saveFailed: '无法保存个人模型设置', retry: '重试',
+    },
     fileTypes: {
       label: '支持的文件类型',
       desc: '限制可选择的文件类型，留空表示支持所有类型',

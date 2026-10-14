@@ -3,7 +3,10 @@
     :title="editorMode === 'create' ? $t('agent.editor.createTitle') : $t('agent.editor.editTitle')"
     v-model="currentSection" :nav-groups="navGroups" :loading="editorInitializing" :z-index="1000"
     nav-guide="agent-editor-sidebar" nav-item-guide-prefix="agent-editor-nav" @close="modalShell.requestClose">
-    <div ref="contentWrapperRef" class="content-wrapper" :class="{ 'content-wrapper--prompts': currentSection === 'prompts' }">
+    <div ref="contentWrapperRef" class="content-wrapper" :class="{
+      'content-wrapper--prompts': currentSection === 'prompts',
+      'content-wrapper--personal-model-only': personalModelMode,
+    }">
       <!-- 基础设置 -->
       <div v-show="currentSection === 'basic'" class="section">
         <div class="section-header">
@@ -19,7 +22,7 @@
           <p class="section-description">{{ $t('agent.editor.basicInfoDesc') }}</p>
         </div>
 
-        <div class="settings-group">
+        <div class="settings-group" :inert="personalModelMode">
           <!-- 智能体 ID（用于 API 集成） -->
           <div v-if="editorMode === 'edit' && editorAgent?.id" class="setting-row">
             <div class="setting-info">
@@ -175,7 +178,7 @@
           </div>
 
           <div class="prompts-panel__body">
-            <div class="settings-group">
+            <div class="settings-group" :inert="personalModelMode">
               <!-- 系统提示词 -->
               <div v-show="activePromptAnchor === 'system'"
                 class="setting-row setting-row-vertical prompts-panel__pane">
@@ -545,7 +548,50 @@
           <p class="section-description">{{ $t('agent.editor.modelConfigDesc') }}</p>
         </div>
 
-        <div class="settings-group">
+        <div v-if="personalModelMode" class="personal-model-preference">
+          <div class="personal-model-preference__header">
+            <div>
+              <h3>{{ $t('agentEditor.personalModel.title') }}</h3>
+              <p>{{ $t('agentEditor.personalModel.desc') }}</p>
+            </div>
+            <t-tag v-if="!personalModelId" theme="default" variant="light">
+              {{ $t('agentEditor.personalModel.inherited') }}
+            </t-tag>
+          </div>
+          <ModelSelector
+            model-type="KnowledgeQA"
+            :selected-model-id="personalModelId"
+            :all-models="allModels"
+            clearable
+            :placeholder="$t('agentEditor.personalModel.placeholder')"
+            @update:selected-model-id="onPersonalModelChange"
+          />
+          <p v-if="personalModelUnavailable" class="personal-model-preference__warning">
+            <t-icon name="error-circle" />
+            {{ $t('agentEditor.personalModel.unavailable') }}
+          </p>
+          <p v-if="personalModelLoadFailed" class="personal-model-preference__warning">
+            <t-icon name="error-circle" />
+            {{ $t('agentEditor.personalModel.loadFailed') }}
+          </p>
+          <div class="personal-model-preference__actions">
+            <t-button v-if="personalModelLoadFailed" variant="outline" :loading="personalModelLoading"
+              @click="loadPersonalModelPreference(editorAgent?.id || '')">
+              {{ $t('agentEditor.personalModel.retry') }}
+            </t-button>
+            <t-button variant="outline" :disabled="!personalModelId || personalModelSaving || personalModelLoading || personalModelLoadFailed"
+              @click="clearPersonalModelPreference">
+              {{ $t('agentEditor.personalModel.restore') }}
+            </t-button>
+            <t-button theme="primary" :loading="personalModelSaving"
+              :disabled="personalModelSaving || personalModelLoading || personalModelUnavailable || personalModelLoadFailed"
+              @click="savePersonalModelPreference">
+              {{ $t('agentEditor.personalModel.save') }}
+            </t-button>
+          </div>
+        </div>
+
+        <div class="settings-group" :inert="personalModelMode">
           <!-- 模型选择 -->
           <div
             class="setting-row"
@@ -726,7 +772,7 @@
           <p class="section-description">{{ $t('agentEditor.imageUpload.sectionDesc') }}</p>
         </div>
 
-        <div class="settings-group">
+        <div class="settings-group" :inert="personalModelMode">
           <!-- 图片上传 -->
           <div class="setting-row" data-guide="agent-create-multimodal">
             <div class="setting-info">
@@ -870,7 +916,7 @@
           <p class="section-description">{{ conversationSectionDesc }}</p>
         </div>
 
-        <div class="settings-group">
+        <div class="settings-group" :inert="personalModelMode">
           <!-- 多轮对话开关（仅普通模式：Agent 模式由 EnsureDefaults 强制开启，
                展示可关闭的开关只会被服务端改回去） -->
           <div v-if="!isAgentMode" class="setting-row">
@@ -1135,7 +1181,7 @@
           </div>
         </div>
 
-        <div class="settings-group">
+        <div class="settings-group" :inert="personalModelMode">
           <!-- 允许的工具（按组渲染，统一网格） -->
           <div
             class="setting-row setting-row-vertical"
@@ -1216,7 +1262,7 @@
           <p class="section-description">{{ $t('agentEditor.mcp.desc') }}</p>
         </div>
 
-        <div class="settings-group">
+        <div class="settings-group" :inert="personalModelMode">
           <!-- MCP 服务选择 -->
           <div class="setting-row">
             <div class="setting-info">
@@ -1268,7 +1314,7 @@
           <p class="section-description">{{ hostOnly ? $t('agent.editor.hostSkillsConfigDesc') : $t('agent.editor.skillsConfigDesc') }}</p>
         </div>
 
-        <div class="settings-group">
+        <div class="settings-group" :inert="personalModelMode">
           <div v-if="!hostOnly" class="setting-row">
             <div class="setting-info">
               <label>{{ $t('agent.editor.sandboxBackend') }}</label>
@@ -1465,7 +1511,7 @@
           <p class="section-description">{{ $t('agent.editor.knowledgeConfigDesc') }}</p>
         </div>
 
-        <div class="settings-group">
+        <div class="settings-group" :inert="personalModelMode">
           <!-- 关联知识库 -->
           <div class="setting-row" data-guide="agent-create-knowledge">
             <div class="setting-info">
@@ -1564,7 +1610,7 @@
           <p class="section-description">{{ $t('agent.editor.webSearchConfigDesc') }}</p>
         </div>
 
-        <div class="settings-group">
+        <div class="settings-group" :inert="personalModelMode">
           <!-- 网络搜索 -->
           <div class="setting-row">
             <div class="setting-info">
@@ -1645,7 +1691,7 @@
           <p class="section-description">{{ $t('agentEditor.desc.retrievalSection') }}</p>
         </div>
 
-        <div class="settings-group">
+        <div class="settings-group" :inert="personalModelMode">
           <!-- 查询扩展（仅普通模式） -->
           <div v-if="!isAgentMode" class="setting-row">
             <div class="setting-info">
@@ -1843,6 +1889,8 @@ import SettingsModalShell from '@/components/SettingsModalShell.vue'
 import {
   createAgent,
   updateAgent,
+  getAgentModelPreference,
+  updateAgentModelPreference,
   listIMChannels,
   type CustomAgent,
   type PlaceholderDefinition,
@@ -3477,6 +3525,74 @@ const isBuiltinAgent = computed(() => {
   return formData.value.is_builtin === true;
 });
 
+// A member inspecting a built-in agent must not be able to change its shared
+// configuration. They can only choose the model used for their own requests.
+const personalModelMode = computed(() => props.readOnly && isBuiltinAgent.value);
+const personalModelId = ref('');
+const personalModelSaving = ref(false);
+const personalModelLoading = ref(false);
+const personalModelLoadFailed = ref(false);
+let personalModelPreferenceRequest = 0;
+const personalModelUnavailable = computed(() => {
+  if (!personalModelId.value) return false;
+  return !allModels.value.some((model) =>
+    model.id === personalModelId.value && model.type === 'KnowledgeQA',
+  );
+});
+
+const onPersonalModelChange = (modelId: string) => {
+  personalModelId.value = modelId;
+};
+
+const loadPersonalModelPreference = async (agentId: string) => {
+  const request = ++personalModelPreferenceRequest;
+  personalModelId.value = '';
+  personalModelLoadFailed.value = false;
+  if (!personalModelMode.value || !agentId) return;
+  personalModelLoading.value = true;
+  try {
+    const result = await getAgentModelPreference(agentId);
+    if (!result?.success) throw new Error('model preference response was unsuccessful');
+    if (request !== personalModelPreferenceRequest || !props.visible || editorAgent.value?.id !== agentId) return;
+    personalModelId.value = result?.data?.model_id || '';
+  } catch (error) {
+    if (request !== personalModelPreferenceRequest || !props.visible || editorAgent.value?.id !== agentId) return;
+    console.warn('Failed to load personal agent model preference', error);
+    personalModelLoadFailed.value = true;
+  } finally {
+    if (request === personalModelPreferenceRequest) personalModelLoading.value = false;
+  }
+};
+
+const savePersonalModelPreference = async (): Promise<boolean> => {
+  const agentId = editorAgent.value?.id || '';
+  const modelId = personalModelId.value;
+  if (!agentId || personalModelUnavailable.value || personalModelLoadFailed.value) return false;
+  personalModelSaving.value = true;
+  try {
+    const result = await updateAgentModelPreference(agentId, modelId);
+    if (!result?.success) throw new Error('model preference response was unsuccessful');
+    if (!props.visible || editorAgent.value?.id !== agentId) return false;
+    await chatResources.ensureAgents(true);
+    MessagePlugin.success(t('agentEditor.personalModel.saved'));
+    emit('success');
+    return true;
+  } catch (error: any) {
+    if (!props.visible || editorAgent.value?.id !== agentId) return false;
+    MessagePlugin.error(error?.message || t('agentEditor.personalModel.saveFailed'));
+    return false;
+  } finally {
+    personalModelSaving.value = false;
+  }
+};
+
+const clearPersonalModelPreference = async () => {
+  const previousModelId = personalModelId.value;
+  personalModelId.value = '';
+  const saved = await savePersonalModelPreference();
+  if (!saved && personalModelId.value === '') personalModelId.value = previousModelId;
+};
+
 // 系统提示词的 placeholder
 const systemPromptPlaceholder = computed(() => {
   return t('agent.editor.systemPromptPlaceholder');
@@ -3594,6 +3710,8 @@ watch(() => props.visible, async (val) => {
       });
       // Display inherited defaults for all agents without persisting a copy.
       fillBuiltinAgentDefaults();
+      if (personalModelMode.value) currentSection.value = 'model';
+      void loadPersonalModelPreference(agentData.id);
       void loadAgentIntegrationCounts(agentData.id);
     } else {
       // 创建新智能体，使用系统默认值
@@ -3682,6 +3800,9 @@ watch(() => props.visible, async (val) => {
       }
     }
   } else {
+    personalModelPreferenceRequest += 1;
+    personalModelLoading.value = false;
+    personalModelLoadFailed.value = false;
     editorInitializing.value = false;
     clearFieldHighlight();
     agentIMChannelCount.value = 0;
@@ -5104,6 +5225,62 @@ const handleSave = async () => {
     flex-direction: column;
     overflow: hidden;
     padding-bottom: 28px;
+  }
+
+  // In personal-model mode every shared control is intentionally inert. The
+  // preference panel opts back in below, so members never get a form that
+  // appears to save space-wide changes.
+  &--personal-model-only {
+    .settings-group {
+      opacity: .58;
+      pointer-events: none;
+      user-select: none;
+    }
+  }
+}
+
+.personal-model-preference {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 20px;
+  padding: 20px;
+  border: 1px solid var(--td-brand-color-light);
+  border-radius: 10px;
+  background: var(--td-brand-color-lightest);
+
+  &__header {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+
+    h3 {
+      margin: 0 0 6px;
+      font-size: 16px;
+      color: var(--td-text-color-primary);
+    }
+
+    p {
+      margin: 0;
+      color: var(--td-text-color-secondary);
+      line-height: 1.5;
+    }
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  &__warning {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 10px 0 0;
+    color: var(--td-error-color);
+    font-size: 13px;
   }
 }
 

@@ -1336,6 +1336,12 @@ export default {
   },
   agentEditor: {
     builtinHint: '내장 에이전트입니다. 이름과 설명은 수정할 수 없지만, 설정 매개변수는 조정할 수 있습니다.',
+    personalModel: {
+      title: '개인 대화 모델', desc: '내가 시작한 대화에만 사용되며, 공간의 공유 에이전트 설정은 변경하지 않습니다.',
+      inherited: '공간 기본값 상속', placeholder: '공간 기본 모델 상속', restore: '공간 기본값 복원', save: '개인 모델 저장',
+      unavailable: '이 모델을 사용할 수 없거나 더 이상 권한이 없습니다. 사용 가능한 모델을 선택하거나 공간 기본값을 복원하세요.',
+      saved: '개인 모델을 저장했습니다', loadFailed: '개인 모델 설정을 불러올 수 없습니다', saveFailed: '개인 모델 설정을 저장할 수 없습니다', retry: '다시 시도',
+    },
     fileTypes: {
       label: '지원 파일 유형',
       desc: '선택 가능한 파일 유형을 제한합니다. 비워두면 모든 유형을 지원합니다.',

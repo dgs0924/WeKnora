@@ -7,6 +7,14 @@ import (
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
+// UserAgentModelPreferenceRepository stores a personal model choice for a
+// public built-in agent. Rows are strictly isolated by user and tenant.
+type UserAgentModelPreferenceRepository interface {
+	Get(ctx context.Context, userID string, tenantID uint64, agentID string) (string, error)
+	Set(ctx context.Context, userID string, tenantID uint64, agentID, modelID string) error
+	Clear(ctx context.Context, userID string, tenantID uint64, agentID string) error
+}
+
 // CustomAgentService defines the custom agent service interface
 // Provides high-level operations for agent creation, querying, updating, and deletion
 type CustomAgentService interface {

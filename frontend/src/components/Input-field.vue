@@ -53,6 +53,7 @@ import {
   type AgentNotReadyReasonKey,
 } from '@/utils/agent-readiness';
 import { formatLocalizedList } from '@/utils/format-list';
+import { effectiveAgentModelId, configWithEffectiveAgentModel } from '@/utils/agentModelPreference';
 import { SKILL_ICON, type MentionItem, type MentionItemType, type MentionRequestItem } from '@/types/mention';
 import { toolboxLocation } from '@/config/toolbox';
 import { supportedLevels, levelLabelKey, levelFromLegacy, clampLevel, type ReasoningLevel } from '@/utils/reasoningEffort';
@@ -321,7 +322,7 @@ const isMentionDisabled = computed(() => {
 // 智能体配置的模型 ID
 const agentModelId = computed(() => {
   if (!hasAgentConfig.value) return null;
-  return currentAgentConfig.value?.model_id || null;
+  return effectiveAgentModelId(selectedAgent.value, settingsStore.selectedAgentSourceTenantId) || null;
 });
 
 // 智能体支持的文件类型（空数组表示支持所有类型）
@@ -2330,7 +2331,7 @@ const handleSelectAgent = async (agent: CustomAgent, sourceTenantId?: string) =>
 
   // 同步模型（选中的对话模型随智能体切换，含共享智能体）。
   // 网络搜索已由 selectAgent 重置为关闭，智能体配置只控制该开关是否可用。
-  const agentModel = agent.config?.model_id;
+  const agentModel = effectiveAgentModelId(actualAgent, sourceTenantId);
   if (agentModel && agentModel.trim() !== '') {
     selectedModelId.value = agentModel;
   } else {
@@ -2514,7 +2515,8 @@ const collectAgentNotReadyReasons = (
   sourceTenantId?: string,
 ): { keys: AgentNotReadyReasonKey[]; labels: string[] } => {
   const isSharedAgent = !!sourceTenantId;
-  const keys = getAgentNotReadyReasonKeys(agent.config, allModels.value, {
+  const config = configWithEffectiveAgentModel(agent, sourceTenantId);
+  const keys = getAgentNotReadyReasonKeys(config, allModels.value, {
     isAgentMode,
     isSharedAgent,
   });

@@ -1344,6 +1344,12 @@ export default {
   },
   agentEditor: {
     builtinHint: '這是內建智慧代理，名稱和描述不可修改，但可以調整設定參數',
+    personalModel: {
+      title: '個人對話模型', desc: '僅用於你發起的對話，不會修改空間共用的智慧代理設定。',
+      inherited: '繼承空間預設', placeholder: '繼承空間預設模型', restore: '恢復空間預設', save: '儲存個人模型',
+      unavailable: '此模型已不可用或你已不再獲授權。請選擇目前可用模型，或恢復空間預設。',
+      saved: '個人模型已儲存', loadFailed: '無法讀取個人模型設定', saveFailed: '無法儲存個人模型設定', retry: '重試',
+    },
     fileTypes: {
       label: '支持的檔案類型',
       desc: '限制可選擇的檔案類型，留空表示支持所有類型',

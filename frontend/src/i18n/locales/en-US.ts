@@ -6499,6 +6499,12 @@ export default {
   },
   agentEditor: {
     builtinHint: 'This is a built-in agent. Name and description cannot be modified, but configuration parameters can be adjusted.',
+    personalModel: {
+      title: 'Personal chat model', desc: 'Used only for conversations you start. It does not change this space’s shared agent configuration.',
+      inherited: 'Inherit space default', placeholder: 'Inherit the space default model', restore: 'Restore space default', save: 'Save personal model',
+      unavailable: 'This model is unavailable or you are no longer authorized to use it. Choose an available model or restore the space default.',
+      saved: 'Personal model saved', loadFailed: 'Unable to load the personal model setting', saveFailed: 'Unable to save the personal model setting', retry: 'Retry',
+    },
     navGroups: {
       basic: 'Basics',
       knowledge: 'Knowledge & Retrieval',

@@ -38,6 +38,8 @@ type CustomAgentHandler struct {
 	// nil in partially-wired unit tests, where the selection is left unchecked.
 	sandboxConfigs sandboxConfigLookup
 	desktop        bool
+	modelService   interfaces.ModelService
+	preferences    interfaces.UserAgentModelPreferenceRepository
 }
 
 // NewCustomAgentHandler creates a new custom agent handler instance
@@ -48,6 +50,8 @@ func NewCustomAgentHandler(
 	userService interfaces.UserService,
 	sandboxConfigs *service.TenantSandboxConfigService,
 	host service.HostSandboxManager,
+	modelService interfaces.ModelService,
+	preferences interfaces.UserAgentModelPreferenceRepository,
 ) *CustomAgentHandler {
 	return &CustomAgentHandler{
 		service:        service,
@@ -56,6 +60,8 @@ func NewCustomAgentHandler(
 		userService:    userService,
 		sandboxConfigs: sandboxConfigs,
 		desktop:        host.Desktop,
+		modelService:   modelService,
+		preferences:    preferences,
 	}
 }
 
@@ -186,7 +192,6 @@ func (h *CustomAgentHandler) GetAgent(c *gin.Context) {
 		c.Error(errors.NewBadRequestError("Agent ID cannot be empty"))
 		return
 	}
-
 	agent, err := h.service.GetAgentByID(ctx, id)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
@@ -206,6 +211,14 @@ func (h *CustomAgentHandler) GetAgent(c *gin.Context) {
 		// is already logged above.
 		_ = c.Error(errors.NewInternalServerError("Failed to load agent"))
 		return
+	}
+	if userID, ok := preferenceCaller(ctx); ok && h.preferences != nil && isPublicBuiltinAgentID(agent.ID) {
+		// Do not stamp request-specific state onto the registry/service object.
+		copy := *agent
+		if modelID, prefErr := h.preferences.Get(ctx, userID, c.GetUint64(types.TenantIDContextKey.String()), agent.ID); prefErr == nil {
+			copy.PersonalModelID = modelID
+		}
+		agent = &copy
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -294,12 +307,127 @@ func (h *CustomAgentHandler) ListAgents(c *gin.Context) {
 	// 内建 agent（IsBuiltin=true, CreatedBy=""）不会有 creator_name，前端按 builtin
 	// 分支单独渲染。
 	enrichAgentCreatorNames(ctx, h.userService, agents)
+	if userID, ok := preferenceCaller(ctx); ok && h.preferences != nil {
+		for i, ag := range agents {
+			if !isPublicBuiltinAgentID(ag.ID) {
+				continue
+			}
+			if modelID, err := h.preferences.Get(ctx, userID, tenantID, ag.ID); err == nil {
+				copy := *ag
+				copy.PersonalModelID = modelID
+				agents[i] = &copy
+			}
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success":                true,
 		"data":                   agents,
 		"disabled_own_agent_ids": disabledOwnIDs,
 	})
+}
+
+type modelPreferenceRequest struct {
+	ModelID string `json:"model_id"`
+}
+
+func preferenceCaller(ctx context.Context) (string, bool) {
+	if _, apiKey := types.TenantAPIKeyScopeFromContext(ctx); apiKey {
+		return "", false
+	}
+	if _, apiKey := types.AuditAPIKeyFromContext(ctx); apiKey {
+		return "", false
+	}
+	userID, ok := types.UserIDFromContext(ctx)
+	return userID, ok && !types.IsSyntheticUserID(userID)
+}
+
+func (h *CustomAgentHandler) modelPreferenceAgent(c *gin.Context) (string, uint64, string, bool) {
+	ctx := c.Request.Context()
+	userID, ok := preferenceCaller(ctx)
+	if !ok {
+		c.Error(errors.NewForbiddenError("Model preferences require a signed-in user"))
+		return "", 0, "", false
+	}
+	agentID := strings.TrimSpace(c.Param("id"))
+	if !isPublicBuiltinAgentID(agentID) {
+		c.Error(errors.NewBadRequestError("Personal model preference is only available for built-in agents"))
+		return "", 0, "", false
+	}
+	tenantID := c.GetUint64(types.TenantIDContextKey.String())
+	if tenantID == 0 {
+		c.Error(errors.NewUnauthorizedError("Missing workspace context"))
+		return "", 0, "", false
+	}
+	return userID, tenantID, agentID, true
+}
+
+func isPublicBuiltinAgentID(agentID string) bool {
+	for _, id := range types.GetBuiltinAgentIDs() {
+		if id == agentID {
+			return true
+		}
+	}
+	return false
+}
+
+// GetModelPreference returns only the current caller's choice.
+func (h *CustomAgentHandler) GetModelPreference(c *gin.Context) {
+	userID, tenantID, agentID, ok := h.modelPreferenceAgent(c)
+	if !ok {
+		return
+	}
+	if h.preferences == nil {
+		c.Error(errors.NewInternalServerError("Model preference service is unavailable"))
+		return
+	}
+	modelID, err := h.preferences.Get(c.Request.Context(), userID, tenantID, agentID)
+	if err != nil {
+		c.Error(errors.NewInternalServerError("Failed to load model preference"))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"model_id": modelID}})
+}
+
+// PutModelPreference writes a personal choice after resolving it in the
+// caller's model scope; GetChatModel rechecks Codex grants as well.
+func (h *CustomAgentHandler) PutModelPreference(c *gin.Context) {
+	userID, tenantID, agentID, ok := h.modelPreferenceAgent(c)
+	if !ok {
+		return
+	}
+	if h.preferences == nil || h.modelService == nil {
+		c.Error(errors.NewInternalServerError("Model preference service is unavailable"))
+		return
+	}
+	var req modelPreferenceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(errors.NewBadRequestError("Invalid request parameters"))
+		return
+	}
+	modelID := strings.TrimSpace(req.ModelID)
+	if modelID == "" {
+		if err := h.preferences.Clear(c.Request.Context(), userID, tenantID, agentID); err != nil {
+			c.Error(errors.NewInternalServerError("Failed to clear model preference"))
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"model_id": ""}})
+		return
+	}
+	model, err := h.modelService.GetModelByID(c.Request.Context(), modelID)
+	if err != nil || model == nil || model.Type != types.ModelTypeKnowledgeQA || model.Status != types.ModelStatusActive {
+		c.Error(errors.NewBadRequestError("Selected model is unavailable for chat"))
+		return
+	}
+	if _, err = h.modelService.GetChatModel(c.Request.Context(), modelID); err != nil {
+		c.Error(errors.NewForbiddenError("Selected model is no longer authorized"))
+		return
+	}
+	if err := h.preferences.Set(c.Request.Context(), userID, tenantID, agentID, modelID); err != nil {
+		c.Error(errors.NewInternalServerError("Failed to save model preference"))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"model_id": modelID}})
 }
 
 // enrichAgentCreatorNames 批量把 agent.CreatedBy 解析成展示名。失败吞掉，

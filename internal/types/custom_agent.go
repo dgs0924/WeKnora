@@ -92,6 +92,9 @@ type CustomAgent struct {
 	// 让前端列表卡片区分「我创建」与「同空间其他成员创建」。不落库，内建 agent / 老数据
 	// 仍可能为空。
 	CreatorName string `yaml:"-" json:"creator_name,omitempty" gorm:"-"`
+	// PersonalModelID is the caller's private choice for this public built-in
+	// agent. It is projected into reads only and never persisted with Config.
+	PersonalModelID string `yaml:"-" json:"personal_model_id,omitempty" gorm:"-"`
 }
 
 // maxAgentAvatarLength mirrors the custom_agents.avatar column limit

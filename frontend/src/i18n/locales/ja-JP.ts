@@ -6488,6 +6488,12 @@ export default {
   },
   agentEditor: {
     builtinHint: 'これは組み込みエージェントです。名前と説明は変更できませんが、設定パラメータは調整できます。',
+    personalModel: {
+      title: '個人用チャットモデル', desc: '自分が開始した会話だけで使用され、スペース共有のエージェント設定は変更しません。',
+      inherited: 'スペースの既定値を継承', placeholder: 'スペースの既定モデルを継承', restore: 'スペースの既定値に戻す', save: '個人用モデルを保存',
+      unavailable: 'このモデルは利用できないか、利用権限がありません。利用可能なモデルを選ぶか、スペースの既定値に戻してください。',
+      saved: '個人用モデルを保存しました', loadFailed: '個人用モデル設定を読み込めません', saveFailed: '個人用モデル設定を保存できません', retry: '再試行',
+    },
     navGroups: {
       basic: '基本',
       knowledge: 'ナレッジと検索',

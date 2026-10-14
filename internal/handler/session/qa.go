@@ -242,6 +242,12 @@ func (h *Handler) parseQARequest(c *gin.Context, logPrefix string) (*qaRequestCo
 	if request.AgentSourceTenantID != 0 && customAgent == nil {
 		return nil, nil, errors.NewNotFoundError("Shared agent not found")
 	}
+	var personalModelErr error
+	customAgent, request.SummaryModelID, personalModelErr = h.applyPersonalAgentModel(ctx, customAgent,
+		c.GetUint64(types.TenantIDContextKey.String()), effectiveTenantID, sharedAgentReadOnly, request.SummaryModelID)
+	if personalModelErr != nil {
+		return nil, nil, personalModelErr
+	}
 
 	// Merge @mentioned items into knowledge_base_ids and knowledge_ids
 	kbIDs, knowledgeIDs := mergeKnowledgeTargets(request.KnowledgeBaseIDs, request.KnowledgeIDs, request.MentionedItems)
@@ -487,6 +493,59 @@ func (h *Handler) parseQARequest(c *gin.Context, logPrefix string) (*qaRequestCo
 	}
 
 	return reqCtx, &request, nil
+}
+
+// applyPersonalAgentModel overlays a private choice on a request-local copy.
+func (h *Handler) applyPersonalAgentModel(ctx context.Context, agent *types.CustomAgent, tenantID, sourceTenantID uint64, shared bool, explicitModelID string) (*types.CustomAgent, string, error) {
+	if agent == nil || tenantID == 0 || sourceTenantID != 0 || shared || !isPublicBuiltinAgent(agent.ID) || h.modelPreferences == nil {
+		return agent, explicitModelID, nil
+	}
+	if agent.TenantID != 0 && agent.TenantID != tenantID {
+		return agent, explicitModelID, nil
+	}
+	if _, ok := types.TenantAPIKeyScopeFromContext(ctx); ok {
+		return agent, explicitModelID, nil
+	}
+	if _, ok := types.AuditAPIKeyFromContext(ctx); ok {
+		return agent, explicitModelID, nil
+	}
+	userID, ok := types.UserIDFromContext(ctx)
+	if !ok || types.IsSyntheticUserID(userID) {
+		return agent, explicitModelID, nil
+	}
+	modelID, err := h.modelPreferences.Get(ctx, userID, tenantID, agent.ID)
+	if err != nil {
+		return nil, "", errors.NewInternalServerError("Failed to load personal model preference")
+	}
+	if modelID == "" {
+		return agent, explicitModelID, nil
+	}
+	if h.modelService == nil {
+		return nil, "", errors.NewInternalServerError("Model service unavailable")
+	}
+	model, err := h.modelService.GetModelByID(ctx, modelID)
+	if err != nil || model == nil || model.Type != types.ModelTypeKnowledgeQA || model.Status != types.ModelStatusActive {
+		return nil, "", errors.NewForbiddenError("Your saved model is no longer available; please select another model")
+	}
+	if _, err = h.modelService.GetChatModel(ctx, modelID); err != nil {
+		return nil, "", errors.NewForbiddenError("Your saved model is no longer authorized; please select another model")
+	}
+	clone := *agent
+	clone.Config = agent.Config
+	clone.Config.ModelID = modelID
+	if strings.TrimSpace(explicitModelID) == "" {
+		explicitModelID = modelID
+	}
+	return &clone, explicitModelID, nil
+}
+
+func isPublicBuiltinAgent(id string) bool {
+	for _, builtinID := range types.GetBuiltinAgentIDs() {
+		if id == builtinID {
+			return true
+		}
+	}
+	return false
 }
 
 func decodeAndValidateAttachmentUploads(

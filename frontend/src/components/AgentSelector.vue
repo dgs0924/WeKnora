@@ -199,6 +199,7 @@ import {
   type AgentNotReadyReasonKey,
 } from '@/utils/agent-readiness';
 import { formatLocalizedList } from '@/utils/format-list';
+import { configWithEffectiveAgentModel } from '@/utils/agentModelPreference';
 import { useChatResourcesStore } from '@/stores/chatResources';
 import {
   isAgentWebSearchEnabled,
@@ -390,7 +391,7 @@ const formatAgentNotReadyReasons = (
 const getAgentNotReadyReasonKeysFor = (agent: CustomAgent, sourceTenantId?: string) => {
   const isAgentMode = agent.config?.agent_mode === 'smart-reasoning';
   const isSharedAgent = !!sourceTenantId;
-  return getAgentNotReadyReasonKeys(agent.config, modelsList.value, {
+  return getAgentNotReadyReasonKeys(configWithEffectiveAgentModel(agent, sourceTenantId), modelsList.value, {
     isAgentMode,
     isSharedAgent,
   });

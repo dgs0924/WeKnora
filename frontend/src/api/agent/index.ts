@@ -155,6 +155,9 @@ export interface CustomAgent {
   // creator_name 由后端 list 接口批量回填，仅用于列表卡片来源徽章。
   creator_name?: string;
   config: CustomAgentConfig;
+  // The current user's model choice for this agent. It is intentionally kept
+  // outside config because config is shared by the whole space.
+  personal_model_id?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -216,6 +219,23 @@ export function createAgent(data: CreateAgentRequest) {
 // 更新智能体
 export function updateAgent(id: string, data: UpdateAgentRequest) {
   return put<{ data: CustomAgent }>(`/api/v1/agents/${id}`, data);
+}
+
+export interface AgentModelPreference {
+  model_id: string;
+}
+
+// Built-in agents are shared configuration. A member can still select a
+// personal primary chat model without mutating that shared configuration.
+export function getAgentModelPreference(id: string) {
+  return get<{ success: boolean; data: AgentModelPreference }>(`/api/v1/agents/${id}/model-preference`);
+}
+
+export function updateAgentModelPreference(id: string, modelId: string) {
+  return put<{ success: boolean; data: AgentModelPreference }>(
+    `/api/v1/agents/${id}/model-preference`,
+    { model_id: modelId },
+  );
 }
 
 // 删除智能体
