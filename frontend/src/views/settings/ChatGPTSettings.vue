@@ -136,6 +136,7 @@
         </t-alert>
 
         <template v-else-if="codexStatus">
+        <div class="chatgpt-settings__overview">
         <div class="setting-row chatgpt-settings__account-status-card">
           <div class="setting-info">
             <div class="setting-label">{{ t('codexSettings.connectionTitle') }}</div>
@@ -194,6 +195,8 @@
           </div>
         </section>
 
+        </div>
+
         <template v-if="codexStatus.connected">
           <div v-if="codexModelsLoading" class="chatgpt-settings__models-loading">
             <t-loading :text="t('codexSettings.modelsLoading')" size="small" />
@@ -234,9 +237,9 @@
               <h4>{{ t('codexSettings.grantsTitle') }}</h4>
               <p>{{ t('codexSettings.grantsDescription') }}</p>
             </div>
-            <t-alert theme="warning" class="chatgpt-settings__grant-warning">
+            <p class="chatgpt-settings__grant-warning"><t-icon name="info-circle" />
               {{ t('codexSettings.grantsUsageWarning') }}
-            </t-alert>
+            </p>
             <div v-if="codexGrantsLoading" class="chatgpt-settings__models-loading">
               <t-loading :text="t('codexSettings.grantsLoading')" size="small" />
             </div>
@@ -257,23 +260,23 @@
               <div v-else-if="!grantMemberID" class="chatgpt-settings__grant-placeholder">
                 {{ t('codexSettings.grantMemberPlaceholder') }}
               </div>
-              <div v-else class="chatgpt-settings__grant-list">
-                <div v-for="model in codexGrants" :key="model.id" class="chatgpt-settings__grant-row">
-                  <div>
-                    <div class="chatgpt-settings__model-name">{{ model.display_name || model.name }}</div>
-                    <code>{{ model.name }}</code>
-                    <t-tag v-if="model.type" size="small" variant="light" class="chatgpt-settings__grant-type">
-                      {{ model.type === 'VLLM' ? t('codexSettings.visionModel') : t('codexSettings.chatModel') }}
-                    </t-tag>
+              <div v-else class="chatgpt-settings__grant-groups">
+                <section v-for="group in codexGrantGroups" :key="group.type" class="chatgpt-settings__grant-group">
+                  <h5>{{ group.label }} <span>{{ group.models.length }}</span></h5>
+                  <div class="chatgpt-settings__grant-list">
+                    <div v-for="model in group.models" :key="model.id" class="chatgpt-settings__grant-row"
+                      :class="{ 'is-selected': selectedCodexGrantIDs.includes(model.id) }">
+                      <div class="chatgpt-settings__grant-model">
+                        <div class="chatgpt-settings__model-name">{{ model.display_name || model.name }}</div>
+                        <code>{{ model.name }}</code>
+                      </div>
+                      <t-checkbox :model-value="selectedCodexGrantIDs.includes(model.id)"
+                        :aria-label="`${model.display_name || model.name} · ${group.label} · ${t('codexSettings.grantModel')}`"
+                        :disabled="savingCodexGrants"
+                        @change="(checked: boolean) => toggleCodexGrant(model.id, checked)" />
+                    </div>
                   </div>
-                  <t-checkbox
-                    :model-value="selectedCodexGrantIDs.includes(model.id)"
-                    :disabled="savingCodexGrants"
-                    @change="(checked: boolean) => toggleCodexGrant(model.id, checked)"
-                  >
-                    {{ t('codexSettings.grantModel') }}
-                  </t-checkbox>
-                </div>
+                </section>
               </div>
               <div class="chatgpt-settings__grant-actions">
                 <t-button theme="primary" :disabled="!grantMemberID || savingCodexGrants" :loading="savingCodexGrants" @click="saveCodexGrants">
@@ -283,9 +286,9 @@
             </template>
           </section>
 
-        <t-alert theme="info" class="chatgpt-settings__usage" :title="t('codexSettings.usageTitle')">
+        <p class="chatgpt-settings__capability"><t-icon name="info-circle" />
           {{ t('codexSettings.capabilityHint') }}
-        </t-alert>
+        </p>
         </template>
       </section>
 
@@ -372,6 +375,10 @@ const codexGrants = ref<CodexModelGrant[]>([])
 const grantUsers = ref<CodexGrantUser[]>([])
 const grantMemberID = ref('')
 const selectedCodexGrantIDs = ref<string[]>([])
+const codexGrantGroups = computed(() => [
+  { type: 'chat', label: t('codexSettings.chatModel'), models: codexGrants.value.filter(model => model.type !== 'VLLM') },
+  { type: 'vision', label: t('codexSettings.visionModel'), models: codexGrants.value.filter(model => model.type === 'VLLM') },
+].filter(group => group.models.length > 0))
 
 let pollTimer: number | null = null
 let authorizationPopup: Window | null = null
@@ -845,25 +852,61 @@ onUnmounted(() => { unmounted = true; stopPolling({ closePopup: true }) })
   h4 { margin: 0 0 6px; font-size: 15px; }
 }
 
-.chatgpt-settings__grant-warning { margin-bottom: 16px; }
-.chatgpt-settings__grant-member { width: min(100%, 440px); margin-bottom: 16px; }
-.chatgpt-settings__grant-placeholder { color: var(--td-text-color-secondary); padding: 16px 0; }
-.chatgpt-settings__grant-list { border: 1px solid var(--td-component-stroke); border-radius: 6px; }
-.chatgpt-settings__grant-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.chatgpt-settings__overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--td-component-stroke);
-
-  &:last-child { border-bottom: 0; }
-  code { color: var(--td-text-color-secondary); font-size: 12px; }
+  .chatgpt-settings__usage-card { margin-top: 0; }
+  .chatgpt-settings__account-status-card { align-items: flex-start; flex-direction: column; }
+  .chatgpt-settings__alert { grid-column: 1 / -1; }
 }
-
+.chatgpt-settings__grant-warning, .chatgpt-settings__capability {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+  .t-icon { flex-shrink: 0; margin-top: 3px; }
+}
+.chatgpt-settings__grant-warning { margin: 0 0 20px; }
+.chatgpt-settings__capability { margin: 12px 0 0; }
+.chatgpt-settings__grant-member { width: min(100%, 440px); margin-bottom: 20px; }
+.chatgpt-settings__grant-placeholder { color: var(--td-text-color-secondary); padding: 16px 0; }
+.chatgpt-settings__grant-group h5 {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 10px; font-size: 13px; font-weight: 500;
+  span { color: var(--td-text-color-placeholder); font-size: 12px; font-weight: 400; }
+}
+.chatgpt-settings__grant-groups { display: grid; gap: 20px; }
+.chatgpt-settings__grant-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.chatgpt-settings__grant-row {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; padding: 12px 14px;
+  border: 1px solid var(--td-component-stroke); border-radius: 8px;
+  transition: background .15s, border-color .15s;
+  &.is-selected { border-color: var(--td-brand-color); background: var(--td-brand-color-light); }
+  code { color: var(--td-text-color-secondary); font-size: 12px; overflow-wrap: anywhere; }
+  .t-checkbox { flex-shrink: 0; }
+}
+.chatgpt-settings__grant-model { min-width: 0; }
+.chatgpt-settings__grant-actions {
+  display: flex; justify-content: flex-end;
+  position: sticky; bottom: 0; z-index: 2;
+  margin-top: 20px; padding: 14px 0;
+  border-top: 1px solid var(--td-component-stroke);
+  background: var(--td-bg-color-container);
+}
+@media (max-width: 860px) {
+  .chatgpt-settings__overview { grid-template-columns: minmax(0, 1fr); }
+}
 @media (max-width: 640px) {
+  .chatgpt-settings__grant-list { grid-template-columns: minmax(0, 1fr); }
   .chatgpt-settings__connection-actions,
-  .chatgpt-settings__model-row,
-  .chatgpt-settings__grant-row { align-items: flex-start; flex-direction: column; }
+  .chatgpt-settings__model-row { align-items: flex-start; flex-direction: column; }
 }
 </style>
